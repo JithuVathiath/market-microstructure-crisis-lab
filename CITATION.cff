@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this educational simulation, please cite it as below."
+title: "Market Microstructure Crisis & Governance Lab"
+type: software
+authors:
+  - family-names: "Biju"
+    given-names: "Jithu Vathiath"
+version: 1.0.0
+date-released: 2026-09-11
+license: MIT
+repository-code: "https://github.com/JithuVathiath/market-microstructure-crisis-lab"
+abstract: "A deterministic browser laboratory for exploring order-book dynamics, crisis propagation, and market-governance interventions."
