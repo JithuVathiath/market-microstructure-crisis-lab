@@ -13,7 +13,23 @@ test("runs, pauses, reconstructs an event, inspects a queue and opens a decision
   await expect(
     page.getByRole("heading", { name: /Build the market.*Break the market/i }),
   ).toBeVisible();
-  await expect(page.getByText("Synthetic data")).toBeVisible();
+  await expect(page.getByText("Synthetic Data")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open instructions" }).click();
+  const instructions = page.getByRole("dialog", {
+    name: "How to Use the Market Lab",
+  });
+  await expect(instructions).toBeVisible();
+  await expect(
+    instructions.getByRole("heading", { name: "Quick-Start Workflow" }),
+  ).toBeVisible();
+  await expect(
+    instructions.getByText("pnpm dev", { exact: true }),
+  ).toBeVisible();
+  await instructions
+    .getByRole("button", { name: "Close instructions" })
+    .click();
+  await expect(instructions).toBeHidden();
 
   await page.getByRole("button", { name: "Launch Flash Crash" }).click();
   await expect(page.getByText(/Tick [1-9]/)).toBeVisible({ timeout: 5_000 });
@@ -28,14 +44,14 @@ test("runs, pauses, reconstructs an event, inspects a queue and opens a decision
   ).toBeVisible();
 
   await page
-    .getByRole("region", { name: "Limit order book" })
+    .getByRole("region", { name: "Limit Order Book" })
     .getByRole("button", { name: /Inspect (bid|ask) queue/ })
     .first()
     .click();
   await expect(page.locator(".queue-inspector li").first()).toBeVisible();
 
   const decision = page
-    .getByRole("region", { name: "Agent decision records" })
+    .getByRole("region", { name: "Agent Decision Records" })
     .getByRole("button")
     .first();
   await decision.click();
@@ -50,17 +66,17 @@ test("runs a paired policy comparison and exposes research batches", async ({
   await page.goto("/");
   await page.getByLabel("Speed bump").fill("3");
   await page
-    .getByRole("button", { name: /Compare against unregulated market/ })
+    .getByRole("button", { name: /Compare with the unregulated market/ })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Same shock, different rules" }),
+    page.getByRole("heading", { name: "Same Shock, Different Rules" }),
   ).toBeVisible({ timeout: 15_000 });
   await expect(
     page.getByRole("cell", { name: "Retail slippage" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Research", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Paired-seed Monte Carlo" }),
+    page.getByRole("heading", { name: "Paired-Seed Monte Carlo" }),
   ).toBeVisible();
   await expect(page.getByLabel("Batch repetitions")).toHaveValue("25");
 });
@@ -109,4 +125,25 @@ test("reproduces an identical event hash and exports a valid replay", async ({
   await expect(page.locator(".integrity-hash")).toContainText(
     replay.eventStreamHash,
   );
+});
+
+test("keeps the instruction guide accessible on a narrow screen", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const helpButton = page.getByRole("button", { name: "Open instructions" });
+  await expect(helpButton).toBeVisible();
+  await helpButton.click();
+
+  const instructions = page.getByRole("dialog", {
+    name: "How to Use the Market Lab",
+  });
+  await expect(instructions).toBeVisible();
+  await expect(
+    instructions.getByRole("heading", { name: "Run the Project Locally" }),
+  ).toBeAttached();
+  await page.keyboard.press("Escape");
+  await expect(instructions).toBeHidden();
 });

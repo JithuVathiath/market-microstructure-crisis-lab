@@ -63,8 +63,8 @@ export const PolicyLab = ({
     >
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Intervention design</span>
-          <h2 id="policy-lab-title">Governance controls</h2>
+          <span className="eyebrow">Intervention Design</span>
+          <h2 id="policy-lab-title">Governance Controls</h2>
         </div>
         <span className="policy-status">Live</span>
       </div>
@@ -108,7 +108,7 @@ export const PolicyLab = ({
         onChange={(value) => update("minimumRestingTicks", value)}
       />
       <Range
-        label="Cancel / trade cap"
+        label="Cancellation-to-trade cap"
         value={policies.maxCancelToTradeRatio}
         minimum={2}
         maximum={50}
@@ -117,7 +117,7 @@ export const PolicyLab = ({
         onChange={(value) => update("maxCancelToTradeRatio", value)}
       />
       <details className="advanced-policies">
-        <summary>Exchange economics</summary>
+        <summary>Exchange Economics</summary>
         <Range
           label="Tick size"
           value={policies.tickSize}
@@ -153,7 +153,7 @@ export const PolicyLab = ({
       >
         {comparing
           ? "Running paired experiments…"
-          : "Compare against unregulated market"}
+          : "Compare with the unregulated market"}
       </button>
     </section>
   );

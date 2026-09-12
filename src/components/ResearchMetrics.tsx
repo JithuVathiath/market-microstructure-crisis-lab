@@ -46,8 +46,8 @@ export const ResearchMetrics = ({ metrics }: ResearchMetricsProps) => {
     >
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Microstructure diagnostics</span>
-          <h2 id="research-metrics-title">Advanced market measures</h2>
+          <span className="eyebrow">Microstructure Diagnostics</span>
+          <h2 id="research-metrics-title">Advanced Market Measures</h2>
         </div>
       </div>
       <div className="research-metric-grid">

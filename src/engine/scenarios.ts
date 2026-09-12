@@ -3,10 +3,10 @@ import type { ScenarioDefinition, ScenarioId } from "./types";
 export const scenarios: readonly ScenarioDefinition[] = [
   {
     id: "flash-crash",
-    name: "Flash crash and liquidity withdrawal",
-    shortName: "Flash crash",
+    name: "Flash Crash and Liquidity Withdrawal",
+    shortName: "Flash Crash",
     description:
-      "A large sell program arrives as market makers withdraw, amplifying price impact and volatility.",
+      "A large sell programme arrives as market makers withdraw, amplifying price impact and volatility.",
     learningGoal:
       "Test whether circuit breakers improve recovery without permanently reducing liquidity.",
     shockTick: 70,
@@ -16,8 +16,8 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "liquidity-drought",
-    name: "Liquidity drought",
-    shortName: "Liquidity drought",
+    name: "Liquidity Drought",
+    shortName: "Liquidity Drought",
     description:
       "Market makers reduce participation while ordinary order flow continues, widening the spread.",
     learningGoal:
@@ -29,8 +29,8 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "institutional-liquidation",
-    name: "Institutional liquidation",
-    shortName: "Institutional sell",
+    name: "Institutional Liquidation",
+    shortName: "Institutional Sell",
     description:
       "A parent sell order is split into repeated child orders against otherwise active liquidity.",
     learningGoal:
@@ -43,12 +43,12 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "information-shock",
-    name: "Fundamental information shock",
-    shortName: "Information shock",
+    name: "Fundamental Information Shock",
+    shortName: "Information Shock",
     description:
       "Fundamental value falls abruptly and heterogeneous agents incorporate the information at different speeds.",
     learningGoal:
-      "Separate rapid price discovery from destabilizing overshoot.",
+      "Separate rapid price discovery from destabilising overshoot.",
     shockTick: 70,
     accent: "#c084fc",
     suggestedMetrics: ["Price-discovery error", "Volatility", "Overshoot"],
@@ -57,8 +57,8 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "latency-race",
-    name: "Latency arms race",
-    shortName: "Latency race",
+    name: "Latency Arms Race",
+    shortName: "Latency Race",
     description:
       "A low-latency participant reacts more frequently than slower participants to small valuation changes.",
     learningGoal: "Compare execution quality before and after a speed bump.",
@@ -66,12 +66,12 @@ export const scenarios: readonly ScenarioDefinition[] = [
     accent: "#38bdf8",
     suggestedMetrics: ["Queue position", "Fill probability", "Retail slippage"],
     limitations:
-      "Ticks are logical time units and are not calibrated milliseconds.",
+      "Ticks are logical units of time, not calibrated milliseconds.",
   },
   {
     id: "volatility-feedback",
-    name: "Volatility feedback loop",
-    shortName: "Volatility feedback",
+    name: "Volatility Feedback Loop",
+    shortName: "Volatility Feedback",
     description:
       "A modest value shock is amplified by short-horizon momentum responses and changing liquidity.",
     learningGoal:
@@ -84,8 +84,8 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "cancellation-surge",
-    name: "Cancellation-surge surveillance",
-    shortName: "Cancellation surge",
+    name: "Cancellation-Surge Surveillance",
+    shortName: "Cancellation Surge",
     description:
       "A burst of quote withdrawals creates an abnormal cancellation signature for surveillance review.",
     learningGoal:
@@ -98,12 +98,12 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "exchange-outage",
-    name: "Synthetic exchange outage",
-    shortName: "Exchange outage",
+    name: "Synthetic Exchange Outage",
+    shortName: "Exchange Outage",
     description:
       "Order acceptance pauses for ten logical ticks before deterministic resumption.",
     learningGoal:
-      "Study queued flow, restart conditions and post-outage liquidity.",
+      "Study queued flow, restart conditions, and post-outage liquidity.",
     shockTick: 65,
     accent: "#94a3b8",
     suggestedMetrics: ["Execution delay", "Spread", "Recovery time"],
@@ -111,8 +111,8 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "tick-size-experiment",
-    name: "Tick-size regime change",
-    shortName: "Tick-size test",
+    name: "Tick-Size Regime Change",
+    shortName: "Tick-Size Test",
     description:
       "The minimum price increment widens during the run while the same agents continue trading.",
     learningGoal:
@@ -124,12 +124,12 @@ export const scenarios: readonly ScenarioDefinition[] = [
   },
   {
     id: "stable",
-    name: "Stable market control",
-    shortName: "Stable control",
+    name: "Stable Market Control",
+    shortName: "Stable Control",
     description:
       "Balanced liquidity and heterogeneous order flow provide a control experiment.",
     learningGoal:
-      "Understand normal spread, depth, volatility, and price-discovery behavior.",
+      "Understand normal spread, depth, volatility, and price-discovery behaviour.",
     shockTick: null,
     accent: "#4ade80",
     suggestedMetrics: ["Spread", "Depth", "Price-discovery error"],

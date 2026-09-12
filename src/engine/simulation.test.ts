@@ -105,18 +105,18 @@ describe("MarketSimulation", () => {
       maxTicks: 52,
     }).runToEnd();
     expect(
-      flash.alerts.some((alert) => alert.title === "Sell-side liquidity shock"),
+      flash.alerts.some((alert) => alert.title === "Sell-Side Liquidity Shock"),
     ).toBe(true);
     expect(
-      drought.alerts.some((alert) => alert.title === "Liquidity withdrawal"),
+      drought.alerts.some((alert) => alert.title === "Liquidity Withdrawal"),
     ).toBe(true);
     expect(
       information.alerts.some(
-        (alert) => alert.title === "Fundamental repricing",
+        (alert) => alert.title === "Fundamental Repricing",
       ),
     ).toBe(true);
     expect(
-      latency.alerts.some((alert) => alert.title === "Unequal reaction speed"),
+      latency.alerts.some((alert) => alert.title === "Unequal Reaction Speed"),
     ).toBe(true);
   });
 
@@ -169,7 +169,7 @@ describe("MarketSimulation", () => {
     const policies = { ...createDefaultConfig().policies, speedBumpTicks: 5 };
     const afterPolicy = simulation.setPolicies(policies);
     expect(simulation.config.policies.speedBumpTicks).toBe(5);
-    expect(afterPolicy.alerts[0]?.title).toBe("Policy settings changed");
+    expect(afterPolicy.alerts[0]?.title).toBe("Policy Settings Changed");
   });
 
   it("applies transmission and exchange latency before retail order arrival", () => {

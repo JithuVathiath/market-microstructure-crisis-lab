@@ -6,6 +6,7 @@ import { CausalTrace } from "./components/CausalTrace";
 import { Comparison } from "./components/Comparison";
 import { DecisionCards } from "./components/DecisionCards";
 import { Forensics } from "./components/Forensics";
+import { Instructions } from "./components/Instructions";
 import { MetricCard } from "./components/MetricCard";
 import { OrderBook } from "./components/OrderBook";
 import { OrderTicket } from "./components/OrderTicket";
@@ -34,6 +35,7 @@ const download = (filename: string, content: string, type: string): void => {
 export const App = () => {
   const lab = useMarketLab();
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [mode, setMode] = useState<"demo" | "research">("demo");
   const [replayError, setReplayError] = useState<string | null>(null);
   const replayInput = useRef<HTMLInputElement>(null);
@@ -107,7 +109,7 @@ export const App = () => {
         </nav>
         <div className="topbar__actions">
           <span className="synthetic-badge">
-            <i /> Synthetic data
+            <i /> Synthetic Data
           </span>
           <button className="text-button" onClick={() => setAboutOpen(true)}>
             Methodology
@@ -121,6 +123,15 @@ export const App = () => {
           >
             Source ↗
           </a>
+          <button
+            className="help-button"
+            type="button"
+            aria-label="Open instructions"
+            title="Open instructions"
+            onClick={() => setInstructionsOpen(true)}
+          >
+            <span aria-hidden="true">?</span>
+          </button>
         </div>
       </header>
 
@@ -128,18 +139,18 @@ export const App = () => {
         <section className="hero">
           <div className="hero__copy">
             <span className="kicker">
-              <i /> Interactive research instrument
+              <i /> Interactive Research Instrument
             </span>
             <small className="hero__overline">
               Market Microstructure Crisis &amp; Governance Lab
             </small>
             <h1>
-              Build the market. <span>Break the market.</span> Rewind the
-              market. Change the rules. Run it again.
+              Build the Market. <span>Break the Market.</span> Rewind the
+              Market. Change the Rules. Run It Again.
             </h1>
             <p>
               A deterministic Rust/WebAssembly market simulator for
-              investigating liquidity crises, algorithmic interactions and
+              investigating liquidity crises, algorithmic interactions, and
               market regulation through event-level replay and counterfactual
               experiments.
             </p>
@@ -161,27 +172,27 @@ export const App = () => {
               <span>Rust</span>
               <span>WebAssembly</span>
               <span>React</span>
-              <span>Deterministic simulation</span>
-              <span>Event-sourced replay</span>
+              <span>Deterministic Simulation</span>
+              <span>Event-Sourced Replay</span>
             </div>
           </div>
           <div className="hero__scenario-card">
-            <span>Active scenario</span>
+            <span>Active Scenario</span>
             <strong>{scenario.name}</strong>
             <p>{scenario.description}</p>
-            <small>Research question: {scenario.learningGoal}</small>
-            <small>Model limit: {scenario.limitations}</small>
+            <small>Research Question: {scenario.learningGoal}</small>
+            <small>Model Limitation: {scenario.limitations}</small>
           </div>
         </section>
 
         <div className="mode-switch" aria-label="Interface mode">
           <div>
             <span className="eyebrow">Workspace</span>
-            <strong>{mode === "demo" ? "Demo mode" : "Research mode"}</strong>
+            <strong>{mode === "demo" ? "Demo Mode" : "Research Mode"}</strong>
             <small>
               {mode === "demo"
                 ? "A guided two-minute view"
-                : "Full parameters, raw events and exports"}
+                : "Full parameters, raw events, and exports"}
             </small>
           </div>
           <div className="segmented mode-switch__buttons">
@@ -305,38 +316,38 @@ export const App = () => {
 
         <section className="metric-grid" aria-label="Market quality metrics">
           <MetricCard
-            label="Market price"
+            label="Market Price"
             value={`$${view.metrics.midPrice.toFixed(2)}`}
-            detail={`Fundamental $${view.fundamentalPrice.toFixed(2)}`}
+            detail={`Fundamental value: $${view.fundamentalPrice.toFixed(2)}`}
             definition="Midpoint of the best displayed bid and ask; falls back to the latest trade when one side is empty."
             tone="green"
           />
           <MetricCard
-            label="Quoted spread"
+            label="Quoted Spread"
             value={`${view.metrics.spreadBps.toFixed(1)} bps`}
-            detail="Lower supports execution quality"
-            definition="Best ask minus best bid, divided by mid-price, in basis points."
+            detail="Lower spreads support execution quality"
+            definition="The best ask minus the best bid, divided by the mid-price and expressed in basis points."
             tone="cyan"
           />
           <MetricCard
             label="Volatility"
             value={`${view.metrics.volatilityBps.toFixed(1)} bps`}
-            detail="Rolling realized volatility"
-            definition="Root mean square of the most recent 30 logical-tick log returns."
+            detail="Rolling realised volatility"
+            definition="The root mean square of the most recent 30 logical-tick log returns."
             tone="pink"
           />
           <MetricCard
-            label="Visible depth"
+            label="Visible Depth"
             value={view.metrics.depth.toLocaleString()}
-            detail="Units across displayed levels"
-            definition="Aggregate quantity at the best five visible price levels on each side."
+            detail="Units across displayed price levels"
+            definition="The aggregate quantity at the five best visible price levels on each side."
             tone="cyan"
           />
           <MetricCard
-            label="Quality score"
+            label="Quality Score"
             value={view.metrics.marketQualityScore.toFixed(1)}
-            detail="Composite, 0–100"
-            definition="Transparent teaching index penalising spread, volatility and price-discovery error."
+            detail="Composite score from 0 to 100"
+            definition="A transparent teaching index that penalises spread, volatility, and price-discovery error."
             tone="amber"
           />
         </section>
@@ -386,8 +397,8 @@ export const App = () => {
 
         <section className="panel export-panel">
           <div>
-            <span className="eyebrow">Reproducible evidence</span>
-            <h2>Export the experiment</h2>
+            <span className="eyebrow">Reproducible Evidence</span>
+            <h2>Export the Experiment</h2>
             <p>
               Save the exact seed, market rules, final state, and incident event
               stream for audit, deterministic reconstruction, or peer review.
@@ -431,7 +442,7 @@ export const App = () => {
         <footer>
           <p>{DISCLAIMER}</p>
           <span>
-            Rust/WASM engine · Price-time priority · Reproducible experiments
+            Rust/WASM Engine · Price-Time Priority · Reproducible Experiments
           </span>
         </footer>
       </main>
@@ -456,14 +467,15 @@ export const App = () => {
             >
               ×
             </button>
-            <span className="eyebrow">Transparent by design</span>
-            <h2 id="methodology-title">What this model does</h2>
+            <span className="eyebrow">Transparent by Design</span>
+            <h2 id="methodology-title">What This Model Does</h2>
             <p>
               A discrete-time exchange matches limit and market orders using
               price-time priority. Six participant archetypes respond to price,
-              value, momentum, inventory, and latency with seeded randomness.
+              value, momentum, inventory, and latency signals using seeded
+              randomness.
             </p>
-            <h3>What you can test</h3>
+            <h3>What You Can Test</h3>
             <ul>
               <li>Whether a circuit breaker limits disorderly repricing.</li>
               <li>How speed bumps change latency advantages.</li>
@@ -473,14 +485,18 @@ export const App = () => {
               </li>
               <li>How identical shocks behave under different rules.</li>
             </ul>
-            <h3>What it is not</h3>
+            <h3>What It Is Not</h3>
             <p>
-              It is not a forecast, broker, execution venue, or calibrated
-              representation of a specific security. Results are synthetic and
-              intended for education and governance research.
+              The lab is neither a forecasting tool, a broker, nor an execution
+              venue. It is not a calibrated representation of a specific
+              security. Results are synthetic and intended for education and
+              governance research.
             </p>
           </section>
         </div>
+      )}
+      {instructionsOpen && (
+        <Instructions onClose={() => setInstructionsOpen(false)} />
       )}
     </div>
   );

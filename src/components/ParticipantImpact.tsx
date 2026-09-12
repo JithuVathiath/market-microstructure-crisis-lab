@@ -40,8 +40,8 @@ export const ParticipantImpact = ({ agents }: ParticipantImpactProps) => {
     >
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Distributional effects</span>
-          <h2 id="impact-title">Participant impact analysis</h2>
+          <span className="eyebrow">Distributional Effects</span>
+          <h2 id="impact-title">Participant Impact Analysis</h2>
         </div>
         <span className="count-chip">Synthetic classes</span>
       </div>
@@ -77,8 +77,8 @@ export const ParticipantImpact = ({ agents }: ParticipantImpactProps) => {
         </table>
       </div>
       <p className="panel-note">
-        Differences are distributional effects within this synthetic model; they
-        do not establish real-world discrimination, fairness, or causal effects.
+        These synthetic distributional differences do not demonstrate real-world
+        discrimination, establish fairness outcomes, or support causal claims.
       </p>
     </section>
   );

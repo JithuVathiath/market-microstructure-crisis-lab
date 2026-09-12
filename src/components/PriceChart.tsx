@@ -65,8 +65,8 @@ export const PriceChart = ({ snapshot }: PriceChartProps) => {
     <section className="panel chart-panel" aria-labelledby="price-chart-title">
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Price discovery</span>
-          <h2 id="price-chart-title">Market vs fundamental value</h2>
+          <span className="eyebrow">Price Discovery</span>
+          <h2 id="price-chart-title">Market vs. Fundamental Value</h2>
         </div>
         <div className="chart-legend" aria-label="Chart legend">
           <span>

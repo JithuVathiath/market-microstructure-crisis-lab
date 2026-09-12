@@ -115,6 +115,31 @@ button:disabled {
   align-items: center;
   gap: 20px;
 }
+.help-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(56, 201, 238, 0.5);
+  border-radius: 50%;
+  background: rgba(56, 201, 238, 0.08);
+  color: var(--cyan);
+  font:
+    700 17px "DM Mono",
+    monospace;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+.help-button:hover {
+  color: #061019;
+  border-color: var(--green);
+  background: var(--green);
+  transform: translateY(-1px);
+}
 .primary-nav {
   display: flex;
   align-items: center;
@@ -1467,6 +1492,13 @@ footer {
   padding: 36px;
   box-shadow: 0 30px 100px #000;
 }
+.modal--instructions {
+  width: min(920px, 100%);
+  max-width: 920px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 40px;
+}
 .modal h2 {
   font-size: 30px;
   margin: 9px 0 18px;
@@ -1489,6 +1521,144 @@ footer {
   background: none;
   border: 0;
   font-size: 24px;
+}
+.instructions__header {
+  padding: 2px 46px 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+.instructions__header h2 {
+  font-size: clamp(30px, 5vw, 46px);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+.instructions__header p {
+  max-width: 680px;
+  margin: 0;
+  font-size: 13px;
+}
+.instructions__section {
+  padding-top: 28px;
+}
+.instructions__section + .instructions__section {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.instructions__section h3 {
+  margin: 0 0 16px;
+  color: #e8f0f8;
+  font-size: 17px;
+}
+.instructions__steps,
+.instructions__local-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.instructions__steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.instructions__steps li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: rgba(4, 15, 24, 0.58);
+}
+.instructions__steps li > span {
+  color: var(--green);
+  font:
+    500 11px "DM Mono",
+    monospace;
+}
+.instructions__steps strong,
+.instructions__local-steps strong,
+.instructions__definitions dt,
+.instructions__tip strong {
+  display: block;
+  color: #e1ebf2;
+  font-size: 12px;
+}
+.instructions__steps p,
+.instructions__local-steps p,
+.instructions__definitions dd,
+.instructions__tip p {
+  margin: 7px 0 0;
+  color: #8fa7b7;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.instructions__section--split {
+  display: grid;
+  grid-template-columns: 1.35fr 0.8fr;
+  gap: 28px;
+}
+.instructions__definitions {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.instructions__definitions > div {
+  padding-left: 14px;
+  border-left: 2px solid rgba(56, 201, 238, 0.45);
+}
+.instructions__definitions dd {
+  margin-left: 0;
+}
+.instructions__tip {
+  align-self: start;
+  padding: 18px;
+  border: 1px solid rgba(59, 225, 194, 0.3);
+  background: rgba(59, 225, 194, 0.06);
+}
+.instructions__tip > span {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--green);
+  font:
+    9px "DM Mono",
+    monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.instructions__local-steps {
+  display: grid;
+  gap: 10px;
+  counter-reset: local-step;
+}
+.instructions__local-steps li {
+  counter-increment: local-step;
+  padding: 14px 14px 14px 48px;
+  border: 1px solid var(--line);
+  background: rgba(4, 15, 24, 0.58);
+  position: relative;
+}
+.instructions__local-steps li::before {
+  content: counter(local-step);
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  color: var(--cyan);
+  font:
+    500 10px "DM Mono",
+    monospace;
+}
+.instructions__local-steps code,
+.instructions__single-command {
+  display: block;
+  margin-top: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid #213c50;
+  background: #06121c;
+  color: #bdeee5;
+  font:
+    10px/1.7 "DM Mono",
+    monospace;
+  white-space: pre-wrap;
 }
 .loading-screen {
   min-height: 100vh;
@@ -1547,6 +1717,9 @@ footer {
 @media (max-width: 760px) {
   .topbar {
     padding-inline: 16px;
+  }
+  .topbar__actions {
+    gap: 9px;
   }
   .brand small,
   .synthetic-badge,
@@ -1627,6 +1800,17 @@ footer {
   }
   .export-panel > div:last-child {
     flex-wrap: wrap;
+  }
+  .modal--instructions {
+    max-height: calc(100vh - 20px);
+    padding: 30px 20px;
+  }
+  .instructions__steps,
+  .instructions__section--split {
+    grid-template-columns: 1fr;
+  }
+  .instructions__steps li {
+    min-height: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -18,10 +18,10 @@ export const BatchExperiments = ({
     <section className="panel batch-panel" aria-labelledby="batch-title">
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Batch experimental result</span>
-          <h2 id="batch-title">Paired-seed Monte Carlo</h2>
+          <span className="eyebrow">Batch Experiment Results</span>
+          <h2 id="batch-title">Paired-Seed Monte Carlo</h2>
         </div>
-        <span className="count-chip">Worker isolated</span>
+        <span className="count-chip">Worker-Isolated</span>
       </div>
       <div className="batch-controls">
         <label>
@@ -42,7 +42,7 @@ export const BatchExperiments = ({
           disabled={running}
         >
           {running
-            ? "Running batch off the UI thread…"
+            ? "Running the batch outside the UI thread…"
             : "Run batch experiment"}
         </button>
       </div>
@@ -88,9 +88,8 @@ export const BatchExperiments = ({
         </div>
       ) : (
         <p className="empty-state">
-          Unlike a single replay, this runs the same policy contrast over a
-          sequence of deterministic seeds and reports empirical simulation
-          intervals.
+          A batch experiment applies the same policy comparison to a sequence of
+          deterministic seeds and reports empirical simulation intervals.
         </p>
       )}
       <p className="panel-note">

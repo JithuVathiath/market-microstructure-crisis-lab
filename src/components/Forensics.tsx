@@ -50,7 +50,7 @@ export const Forensics = ({
     >
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Deterministic event-sourced replay</span>
+          <span className="eyebrow">Deterministic Event-Sourced Replay</span>
           <h2 id="forensics-title">Market Time Travel</h2>
         </div>
         <span className="seed-chip">
@@ -93,7 +93,7 @@ export const Forensics = ({
           />
         </label>
         <label>
-          <span>Jump to latest</span>
+          <span>Latest Event Type</span>
           <select
             aria-label="Event jump type"
             value={jumpType}
@@ -107,7 +107,7 @@ export const Forensics = ({
           </select>
         </label>
         <button className="button button--ghost" onClick={jump}>
-          Jump
+          Jump to Event
         </button>
         {selectedSequence !== null && (
           <button className="text-button" onClick={() => onSelect(null)}>
