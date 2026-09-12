@@ -8,8 +8,8 @@ export const AgentTable = ({ agents }: AgentTableProps) => (
   <section className="panel agent-panel" aria-labelledby="agent-title">
     <div className="panel__header">
       <div>
-        <span className="eyebrow">Heterogeneous behavior</span>
-        <h2 id="agent-title">Participant monitor</h2>
+        <span className="eyebrow">Heterogeneous Behaviour</span>
+        <h2 id="agent-title">Participant Monitor</h2>
       </div>
       <span className="count-chip">{agents.length} agents</span>
     </div>

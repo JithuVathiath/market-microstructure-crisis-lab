@@ -16,8 +16,8 @@ export const Timeline = ({
     <section className="panel timeline-panel" aria-labelledby="timeline-title">
       <div className="panel__header timeline-header">
         <div>
-          <span className="eyebrow">Deterministic replay</span>
-          <h2 id="timeline-title">Time-travel debugger</h2>
+          <span className="eyebrow">Deterministic Replay</span>
+          <h2 id="timeline-title">Time-Travel Debugger</h2>
         </div>
         {selectedTick !== null && (
           <button className="text-button" onClick={() => onSelect(null)}>

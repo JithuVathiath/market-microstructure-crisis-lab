@@ -26,8 +26,8 @@ export const OrderTicket = ({ referencePrice, onSubmit }: OrderTicketProps) => {
     <section className="panel ticket-panel" aria-labelledby="ticket-title">
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Human in the loop</span>
-          <h2 id="ticket-title">Order ticket</h2>
+          <span className="eyebrow">Human in the Loop</span>
+          <h2 id="ticket-title">Order Ticket</h2>
         </div>
       </div>
       <div className="segmented" role="group" aria-label="Order side">

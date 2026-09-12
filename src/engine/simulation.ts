@@ -152,7 +152,7 @@ export class MarketSimulation {
       if (this.haltUntilTick !== null && this.tick >= this.haltUntilTick) {
         this.alert(
           "success",
-          "Trading resumed",
+          "Trading Resumed",
           "The circuit-breaker pause has ended.",
         );
         this.haltUntilTick = null;
@@ -223,7 +223,7 @@ export class MarketSimulation {
     });
     this.alert(
       "info",
-      "Policy settings changed",
+      "Policy Settings Changed",
       "New controls apply to subsequent orders.",
     );
     return this.snapshot();
@@ -361,9 +361,10 @@ export class MarketSimulation {
   private objectiveFor(kind: AgentKind): string {
     return {
       "market-maker": "Earn spread while controlling inventory exposure",
-      noise: "Execute a heterogeneous liquidity demand",
+      noise: "Submit heterogeneous liquidity-demand orders",
       momentum: "Capture short-horizon price continuation",
-      value: "Trade market price toward estimated fundamental value",
+      value:
+        "Trade when market price diverges from estimated fundamental value",
       institutional: "Complete the parent order with controlled market impact",
       latency: "Capture transient price-to-value discrepancies",
     }[kind];
@@ -474,21 +475,21 @@ export class MarketSimulation {
       });
       this.alert(
         "critical",
-        "Fundamental repricing",
+        "Fundamental Repricing",
         "Estimated value fell 6% in one tick.",
       );
     }
     if (scenario === "flash-crash" && this.tick === 70) {
       this.shockObserved = true;
-      this.eventLabel = "Institutional sell program activated";
+      this.eventLabel = "Institutional sell programme activated";
       this.recordEvent("ShockTriggered", "institutional_sell_program", {
         childOrderQuantity: 220,
         scheduledEndTick: 78,
       });
       this.alert(
         "critical",
-        "Sell-side liquidity shock",
-        "A large execution program arrived as quoted depth declined.",
+        "Sell-Side Liquidity Shock",
+        "A large execution programme arrived as quoted depth declined.",
       );
     }
     if (scenario === "liquidity-drought" && this.tick === 60) {
@@ -499,7 +500,7 @@ export class MarketSimulation {
       });
       this.alert(
         "warning",
-        "Liquidity withdrawal",
+        "Liquidity Withdrawal",
         "Displayed market-maker depth is contracting.",
       );
     }
@@ -511,7 +512,7 @@ export class MarketSimulation {
       });
       this.alert(
         "warning",
-        "Unequal reaction speed",
+        "Unequal Reaction Speed",
         "Low-latency agents can react before slower participants.",
       );
     }
@@ -524,7 +525,7 @@ export class MarketSimulation {
       });
       this.alert(
         "critical",
-        "Institutional liquidation",
+        "Institutional Liquidation",
         "A scheduled parent sell order began releasing child orders.",
       );
     }
@@ -537,7 +538,7 @@ export class MarketSimulation {
       });
       this.alert(
         "warning",
-        "Feedback loop initiated",
+        "Feedback Loop Initiated",
         "A modest value shock activated stronger momentum responses.",
       );
     }
@@ -549,18 +550,18 @@ export class MarketSimulation {
       });
       this.alert(
         "warning",
-        "Cancellation surge",
+        "Cancellation Surge",
         "Displayed liquidity began disappearing unusually quickly.",
       );
     }
     if (scenario === "cancellation-surge" && this.tick === 60) {
       this.recordEvent("SurveillanceAlert", "abnormal_cancellation_pattern", {
-        label: "Potential layering-like pattern detected",
+        label: "Potential Layering-Like Pattern Detected",
         legalConclusion: false,
       });
       this.alert(
         "critical",
-        "Potential layering-like pattern detected",
+        "Potential Layering-Like Pattern Detected",
         "Synthetic cancellation activity crossed the configured surveillance pattern threshold; this is not a legal conclusion.",
       );
     }
@@ -574,7 +575,7 @@ export class MarketSimulation {
       });
       this.alert(
         "critical",
-        "Exchange outage",
+        "Exchange Outage",
         "The synthetic venue stopped accepting orders for ten logical ticks.",
       );
     }
@@ -592,7 +593,7 @@ export class MarketSimulation {
       });
       this.alert(
         "info",
-        "Tick size changed",
+        "Tick Size Changed",
         "New orders now use a $0.05 minimum price increment.",
       );
     }
@@ -775,7 +776,7 @@ export class MarketSimulation {
           quantity:
             this.config.scenario === "institutional-liquidation" ? 145 : 220,
         },
-        "Executed one child order from a large sell program",
+        "Executed one child order from a large sell programme",
       );
     } else if (this.tick % 18 === 0) {
       const side = this.random.chance(0.5) ? "buy" : "sell";
@@ -1112,7 +1113,7 @@ export class MarketSimulation {
       this.eventLabel = "Circuit breaker activated";
       this.alert(
         "critical",
-        "Circuit breaker activated",
+        "Circuit Breaker Activated",
         `${round(movePct, 2)}% reference-price move exceeded the configured threshold.`,
       );
     }
@@ -1143,8 +1144,8 @@ export class MarketSimulation {
       this.recoveryTicks = this.tick - shockTick;
       this.alert(
         "success",
-        "Market quality recovered",
-        `Price error and spread normalized after ${this.recoveryTicks} ticks.`,
+        "Market Quality Recovered",
+        `Price error and spread normalised after ${this.recoveryTicks} ticks.`,
       );
     }
   }

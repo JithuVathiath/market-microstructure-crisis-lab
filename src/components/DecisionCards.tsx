@@ -27,8 +27,8 @@ export const DecisionCards = ({
     <section className="panel decision-panel" aria-labelledby="decision-title">
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Inspect agent logic</span>
-          <h2 id="decision-title">Agent decision records</h2>
+          <span className="eyebrow">Inspect Agent Logic</span>
+          <h2 id="decision-title">Agent Decision Records</h2>
         </div>
         <span className="count-chip">Engine-derived</span>
       </div>

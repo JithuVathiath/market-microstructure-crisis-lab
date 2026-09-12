@@ -19,8 +19,8 @@ export const Comparison = ({ result }: ComparisonProps) => (
   >
     <div className="panel__header">
       <div>
-        <span className="eyebrow">Causal comparison</span>
-        <h2 id="comparison-title">Same shock, different rules</h2>
+        <span className="eyebrow">Causal Comparison</span>
+        <h2 id="comparison-title">Same Shock, Different Rules</h2>
       </div>
       <span className="seed-chip">Seed {result.baseline.seed}</span>
     </div>
@@ -30,32 +30,32 @@ export const Comparison = ({ result }: ComparisonProps) => (
         <strong>
           {result.baseline.stressMetrics.resilienceScore.toFixed(1)}
         </strong>
-        <small>resilience score</small>
+        <small>Resilience Score</small>
       </article>
       <div className="comparison-arrow">→</div>
       <article className="comparison-grid__intervention">
-        <span>Policy lab</span>
+        <span>Policy Intervention</span>
         <strong>
           {result.intervention.stressMetrics.resilienceScore.toFixed(1)}
         </strong>
-        <small>resilience score</small>
+        <small>Resilience Score</small>
       </article>
     </div>
     <div className="comparison-deltas">
       <span>
-        <small>Spread improvement</small>
+        <small>Spread Improvement</small>
         <strong>{signed(result.improvements.spreadPct)}</strong>
       </span>
       <span>
-        <small>Volatility improvement</small>
+        <small>Volatility Improvement</small>
         <strong>{signed(result.improvements.volatilityPct)}</strong>
       </span>
       <span>
-        <small>Pricing-error improvement</small>
+        <small>Price-Discovery Error Improvement</small>
         <strong>{signed(result.improvements.priceErrorPct)}</strong>
       </span>
       <span>
-        <small>Quality uplift</small>
+        <small>Quality Uplift</small>
         <strong>
           {signed(result.improvements.marketQualityPoints, " pts")}
         </strong>
@@ -67,7 +67,7 @@ export const Comparison = ({ result }: ComparisonProps) => (
           <tr>
             <th>Outcome</th>
             <th>Baseline</th>
-            <th>Policy world</th>
+            <th>Policy Intervention</th>
             <th>Change</th>
           </tr>
         </thead>
@@ -170,7 +170,7 @@ export const Comparison = ({ result }: ComparisonProps) => (
             </td>
           </tr>
           <tr>
-            <td>Cancellation / trade</td>
+            <td>Cancellation-to-trade ratio</td>
             <td>
               {result.baseline.finalMetrics.cancelToTradeRatio.toFixed(1)}×
             </td>

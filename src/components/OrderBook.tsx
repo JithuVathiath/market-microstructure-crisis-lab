@@ -60,8 +60,8 @@ export const OrderBook = ({ book }: OrderBookProps) => {
     <section className="panel book-panel" aria-labelledby="order-book-title">
       <div className="panel__header">
         <div>
-          <span className="eyebrow">Live liquidity</span>
-          <h2 id="order-book-title">Limit order book</h2>
+          <span className="eyebrow">Live Liquidity</span>
+          <h2 id="order-book-title">Limit Order Book</h2>
         </div>
         <span className="spread-chip">
           {book.spread === null ? "—" : `${book.spread.toFixed(2)} spread`}
@@ -106,7 +106,7 @@ export const OrderBook = ({ book }: OrderBookProps) => {
       </div>
       <div className="queue-inspector" aria-live="polite">
         <div>
-          <span className="eyebrow">FIFO queue position</span>
+          <span className="eyebrow">FIFO Queue Position</span>
           <strong>
             {selection
               ? `${selection.side.toUpperCase()} · $${selection.price.toFixed(2)}`

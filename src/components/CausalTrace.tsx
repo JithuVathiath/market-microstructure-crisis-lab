@@ -13,8 +13,8 @@ export const CausalTrace = ({ steps, onSelect }: CausalTraceProps) => (
   >
     <div className="panel__header">
       <div>
-        <span className="eyebrow">Why did this happen?</span>
-        <h2 id="causal-title">Traceable crisis sequence</h2>
+        <span className="eyebrow">Why Did This Happen?</span>
+        <h2 id="causal-title">Traceable Crisis Sequence</h2>
       </div>
       <span className="count-chip">Observed events only</span>
     </div>
@@ -34,7 +34,8 @@ export const CausalTrace = ({ steps, onSelect }: CausalTraceProps) => (
       </ol>
     ) : (
       <p className="empty-state">
-        Advance to the scenario shock to reveal its event-backed causal chain.
+        Run the simulation until the scenario shock occurs to reveal its
+        event-backed causal chain.
       </p>
     )}
   </section>
