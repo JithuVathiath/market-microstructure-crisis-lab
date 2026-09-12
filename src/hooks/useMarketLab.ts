@@ -120,6 +120,11 @@ export const useMarketLab = () => {
     workerRef.current?.postMessage({ type: "step" });
   }, []);
 
+  const stop = useCallback(() => {
+    setPlaying(false);
+    workerRef.current?.postMessage({ type: "pause" });
+  }, []);
+
   const reset = useCallback(() => initialize(config), [config, initialize]);
 
   const updateSpeed = useCallback(
@@ -323,6 +328,7 @@ export const useMarketLab = () => {
     speedOptions,
     playing,
     toggle,
+    stop,
     step,
     reset,
     selectScenario,
