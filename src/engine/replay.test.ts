@@ -13,7 +13,13 @@ describe("replay and report exports", () => {
   const snapshot = new MarketSimulation(config).runToEnd();
 
   it("round-trips versioned replay data", () => {
-    const replay = createReplay(config, snapshot, "2026-01-01T00:00:00.000Z");
+    const replay = createReplay(
+      config,
+      snapshot,
+      [],
+      [],
+      "2026-01-01T00:00:00.000Z",
+    );
     expect(parseReplay(JSON.stringify(replay))).toEqual(replay);
     expect(replay.disclaimer).toBe(DISCLAIMER);
   });
@@ -23,6 +29,10 @@ describe("replay and report exports", () => {
       "Unsupported or invalid replay file",
     );
     expect(() => parseReplay("{broken")).toThrow();
+    const replay = createReplay(config, snapshot);
+    expect(() =>
+      parseReplay(JSON.stringify({ ...replay, eventStreamHash: "tampered" })),
+    ).toThrow("Replay integrity check failed");
   });
 
   it("creates a standalone, escaped incident report", () => {

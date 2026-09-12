@@ -11,6 +11,8 @@ The lab is a transparent educational model for asking market-design questions. I
 - Market orders consume available liquidity and unfilled quantity expires.
 - Trades execute at the resting order's price.
 - Maker rebates and taker fees are configurable in basis points.
+- Exchange mechanics execute in a Rust core compiled to WebAssembly. Prices are
+  ordered using integer tick coordinates.
 - Cash, inventory, outstanding-sell, and reserved-cash constraints prevent impossible agent positions.
 - A passive, deep liquidity reserve makes severe sweeps observable without inventing trades after the book is empty. It is excluded from the participant monitor but included in market totals.
 
@@ -27,9 +29,16 @@ The lab is a transparent educational model for asking market-design questions. I
 
 These are stylised rules, not estimates of individual or institutional behavior.
 
+Each participant has a synthetic market-data, decision, transmission, and
+exchange-processing latency profile. Orders reach the venue only after the latter
+two delays; observations can therefore be stale when a decision is made.
+
 ## Scenarios
 
-Each scenario changes a small, documented set of mechanisms. The stable scenario is the control. Crisis scenarios include liquidity withdrawal, a large sell program, an information shock, and a latency race.
+Each scenario changes a small, documented set of mechanisms. The stable scenario
+is the control. Ten curated scenarios cover liquidity withdrawal, sell programmes,
+information arrival, latency, volatility feedback, cancellation surveillance,
+outage/restart, and tick-size changes. See [scenarios.md](scenarios.md).
 
 ## Governance controls
 
@@ -37,6 +46,7 @@ Each scenario changes a small, documented set of mechanisms. The stable scenario
 - Speed bump: reduces the action frequency of the low-latency archetype.
 - Minimum resting time: prevents immediate order cancellation.
 - Cancellation cap: limits an agent's cancellation-to-trade ratio.
+- Tick size and maker/taker fees: change exchange price granularity and economics.
 
 The counterfactual feature runs the selected policy configuration and an unregulated baseline using the same scenario and random seed. This is a controlled computational comparison, not a causal estimate of real-world regulation.
 
@@ -53,4 +63,4 @@ The counterfactual feature runs the selected policy configuration and an unregul
 
 ## Limitations
 
-The model has no continuous-time queue, hidden liquidity, fragmentation, adverse-selection estimation, empirical calibration, strategic learning, or network latency distribution. Its fundamental value is simulated and observable to some agent rules. Conclusions apply to this model only.
+See [limitations.md](limitations.md) for the complete interpretation boundary.

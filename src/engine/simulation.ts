@@ -1,15 +1,27 @@
 import { calculateMetrics, percentageImprovement } from "./metrics";
-import { defaultPolicies, LimitOrderBook, participantLabel } from "./orderBook";
+import { EventStore } from "./eventStore";
+import {
+  defaultPolicies,
+  type ExchangeBook,
+  LimitOrderBook,
+  participantLabel,
+} from "./orderBook";
 import { SeededRandom } from "./rng";
 import { scenarioById } from "./scenarios";
 import type {
   AgentKind,
   AgentState,
   AgentView,
+  BatchExperimentResult,
+  BookView,
   CounterfactualResult,
+  CausalStep,
   DecisionEvent,
   ExperimentResult,
+  LatencyProfile,
   MarketAlert,
+  MarketEvent,
+  MarketEventType,
   MarketMetrics,
   MarketSnapshot,
   OrderRequest,
@@ -35,6 +47,13 @@ const agentBlueprints: readonly [AgentKind, number][] = [
   ["latency", 1],
 ];
 
+interface PendingOrder {
+  dueTick: number;
+  agentId: string;
+  request: OrderRequest;
+  reason: string;
+}
+
 export const createDefaultConfig = (
   scenario: ScenarioId = "flash-crash",
 ): SimulationConfig => ({
@@ -45,10 +64,16 @@ export const createDefaultConfig = (
   policies: defaultPolicies(),
 });
 
+export type BookFactory = (policies: PolicyConfig) => ExchangeBook;
+
+const defaultBookFactory: BookFactory = (policies) =>
+  new LimitOrderBook(policies);
+
 export class MarketSimulation {
   readonly config: SimulationConfig;
   private readonly random: SeededRandom;
-  private readonly book: LimitOrderBook;
+  private readonly book: ExchangeBook;
+  private readonly eventStore = new EventStore();
   private agents: AgentState[];
   private tick = 0;
   private status: SimulationStatus = "ready";
@@ -62,28 +87,57 @@ export class MarketSimulation {
   private alerts: MarketAlert[] = [];
   private history: PricePoint[] = [];
   private retailSlippages: number[] = [];
+  private institutionalShortfalls: number[] = [];
   private totalVolume = 0;
   private recoveryTicks: number | null = null;
   private shockObserved = false;
   private crisisDeteriorated = false;
+  private pendingOrders: PendingOrder[] = [];
+  private exchangeFeeRevenue = 0;
+  private initialCash = 0;
+  private initialInventory = 0;
 
-  constructor(config: SimulationConfig) {
+  constructor(
+    config: SimulationConfig,
+    bookFactory: BookFactory = defaultBookFactory,
+  ) {
     this.config = {
       ...config,
       policies: { ...config.policies },
     };
     this.random = new SeededRandom(config.seed);
-    this.book = new LimitOrderBook(config.policies);
+    this.book = bookFactory(config.policies);
     this.fundamentalPrice = config.initialPrice;
     this.lastPrice = config.initialPrice;
     this.referencePrice = config.initialPrice;
     this.agents = this.createAgents();
+    this.initialCash = this.agents.reduce(
+      (total, agent) => total + agent.cash,
+      0,
+    );
+    this.initialInventory = this.agents.reduce(
+      (total, agent) => total + agent.inventory,
+      0,
+    );
     this.seedOpeningBook();
     this.captureHistory();
   }
 
   step(): MarketSnapshot {
-    if (this.status === "complete") return this.snapshot();
+    this.advanceState();
+    return this.snapshot();
+  }
+
+  advanceForAnalysis(): {
+    status: SimulationStatus;
+    metrics: MarketMetrics;
+  } {
+    const metrics = this.advanceState() ?? this.metrics();
+    return { status: this.status, metrics };
+  }
+
+  private advanceState(): MarketMetrics | null {
+    if (this.status === "complete") return null;
     this.tick += 1;
     this.book.setTick(this.tick);
     this.status = "running";
@@ -102,15 +156,20 @@ export class MarketSimulation {
           "The circuit-breaker pause has ended.",
         );
         this.haltUntilTick = null;
+        this.book.resume("circuit_breaker_elapsed");
+        this.collectCoreEvents();
       }
+      this.flushPendingOrders();
       for (const agent of this.agents) this.act(agent);
     }
 
-    this.captureHistory();
-    this.checkCircuitBreaker();
-    this.checkRecovery();
+    const book = this.book.view();
+    this.captureHistory(book);
+    const metrics = this.metrics(book);
+    this.checkCircuitBreaker(book);
+    this.checkRecovery(metrics);
     if (this.tick >= this.config.maxTicks) this.status = "complete";
-    return this.snapshot();
+    return metrics;
   }
 
   runToEnd(): MarketSnapshot {
@@ -120,6 +179,24 @@ export class MarketSimulation {
 
   tradeCount(): number {
     return this.trades.length;
+  }
+
+  eventStream(): MarketEvent[] {
+    return this.eventStore.all();
+  }
+
+  eventsSince(sequenceNumber: number): MarketEvent[] {
+    return this.eventStore.since(sequenceNumber);
+  }
+
+  decisionsSince(sequenceNumber: number): DecisionEvent[] {
+    return this.decisions
+      .filter((decision) => decision.sequenceNumber > sequenceNumber)
+      .map((decision) => ({
+        ...decision,
+        latency: { ...decision.latency },
+        variables: { ...decision.variables },
+      }));
   }
 
   submitManualOrder(
@@ -141,6 +218,9 @@ export class MarketSimulation {
   setPolicies(policies: PolicyConfig): MarketSnapshot {
     this.config.policies = { ...policies };
     this.book.setPolicies(this.config.policies);
+    this.recordEvent("PolicyChanged", "interactive_policy_update", {
+      policies: { ...policies },
+    });
     this.alert(
       "info",
       "Policy settings changed",
@@ -183,6 +263,11 @@ export class MarketSimulation {
       priceHistory: this.history.slice(-220),
       haltUntilTick: this.haltUntilTick,
       eventLabel: this.eventLabel,
+      latestSequenceNumber: this.eventStore.latestSequenceNumber(),
+      eventStreamHash: this.eventStore.hash(),
+      recentEvents: this.eventStore.recent(30).reverse(),
+      causalChain: this.causalChain(),
+      conservation: this.conservationAudit(),
     };
   }
 
@@ -195,7 +280,7 @@ export class MarketSimulation {
             `${kind}-${index + 1}`,
             kind,
             `${participantLabel(kind)} ${index + 1}`,
-            kind === "latency" ? 0 : index % 2,
+            index,
           ),
         );
       }
@@ -219,7 +304,7 @@ export class MarketSimulation {
     id: string,
     kind: AgentKind,
     label: string,
-    latencyTicks: number,
+    profileIndex: number,
   ): AgentState {
     const cash = 100_000;
     const inventory = 1_000;
@@ -229,14 +314,73 @@ export class MarketSimulation {
       label,
       cash,
       inventory,
+      inventoryLimit: kind === "institutional" ? 3_000 : 1_600,
+      riskTolerance: kind === "market-maker" ? 0.72 : 0.86,
+      observedPrice: this.config.initialPrice,
+      privateValuation: this.config.initialPrice,
       initialWealth: cash + inventory * this.config.initialPrice,
       submittedQuantity: 0,
       executedQuantity: 0,
       cancellations: 0,
       trades: 0,
-      latencyTicks,
+      latency: this.latencyProfile(kind, profileIndex),
       active: true,
       lastDecision: "Awaiting first decision",
+      currentObjective: this.objectiveFor(kind),
+    };
+  }
+
+  private latencyProfile(kind: AgentKind, index: number): LatencyProfile {
+    if (kind === "latency" || kind === "market-maker") {
+      return {
+        label: index === 0 ? "Co-located algorithm" : "Low-latency institution",
+        marketDataTicks: 0,
+        decisionTicks: index,
+        transmissionTicks: 0,
+        exchangeProcessingTicks: 0,
+      };
+    }
+    if (kind === "noise") {
+      return {
+        label: index % 2 === 0 ? "Retail broker" : "Retail participant",
+        marketDataTicks: 2 + (index % 2),
+        decisionTicks: 1 + (index % 2),
+        transmissionTicks: 2 + (index % 2),
+        exchangeProcessingTicks: 1,
+      };
+    }
+    return {
+      label: "Institutional participant",
+      marketDataTicks: 1,
+      decisionTicks: index % 2,
+      transmissionTicks: 1,
+      exchangeProcessingTicks: 1,
+    };
+  }
+
+  private objectiveFor(kind: AgentKind): string {
+    return {
+      "market-maker": "Earn spread while controlling inventory exposure",
+      noise: "Execute a heterogeneous liquidity demand",
+      momentum: "Capture short-horizon price continuation",
+      value: "Trade market price toward estimated fundamental value",
+      institutional: "Complete the parent order with controlled market impact",
+      latency: "Capture transient price-to-value discrepancies",
+    }[kind];
+  }
+
+  private observedMarket(agent: AgentState): {
+    price: number;
+    fundamental: number;
+  } {
+    const index = Math.max(
+      0,
+      this.history.length - 1 - agent.latency.marketDataTicks,
+    );
+    const point = this.history[index];
+    return {
+      price: point?.price ?? this.lastPrice,
+      fundamental: point?.fundamental ?? this.fundamentalPrice,
     };
   }
 
@@ -309,8 +453,14 @@ export class MarketSimulation {
   }
 
   private evolveFundamental(): void {
+    const previous = this.fundamentalPrice;
     const drift = this.random.between(-0.00018, 0.00018);
     this.fundamentalPrice = round(this.fundamentalPrice * (1 + drift));
+    this.recordEvent("FundamentalValueUpdated", "seeded_value_process", {
+      previous,
+      current: this.fundamentalPrice,
+      drift,
+    });
   }
 
   private applyScenarioState(): void {
@@ -319,6 +469,9 @@ export class MarketSimulation {
       this.fundamentalPrice = round(this.fundamentalPrice * 0.94);
       this.shockObserved = true;
       this.eventLabel = "Negative information shock";
+      this.recordEvent("ShockTriggered", "negative_information_arrival", {
+        fundamentalMovePct: -6,
+      });
       this.alert(
         "critical",
         "Fundamental repricing",
@@ -328,6 +481,10 @@ export class MarketSimulation {
     if (scenario === "flash-crash" && this.tick === 70) {
       this.shockObserved = true;
       this.eventLabel = "Institutional sell program activated";
+      this.recordEvent("ShockTriggered", "institutional_sell_program", {
+        childOrderQuantity: 220,
+        scheduledEndTick: 78,
+      });
       this.alert(
         "critical",
         "Sell-side liquidity shock",
@@ -337,6 +494,9 @@ export class MarketSimulation {
     if (scenario === "liquidity-drought" && this.tick === 60) {
       this.shockObserved = true;
       this.eventLabel = "Market makers reducing exposure";
+      this.recordEvent("ShockTriggered", "market_maker_risk_reduction", {
+        scheduledEndTick: 120,
+      });
       this.alert(
         "warning",
         "Liquidity withdrawal",
@@ -346,18 +506,109 @@ export class MarketSimulation {
     if (scenario === "latency-race" && this.tick === 50) {
       this.shockObserved = true;
       this.eventLabel = "Latency asymmetry increased";
+      this.recordEvent("ShockTriggered", "latency_asymmetry", {
+        lowLatencyAgent: "latency-1",
+      });
       this.alert(
         "warning",
         "Unequal reaction speed",
         "Low-latency agents can react before slower participants.",
       );
     }
+    if (scenario === "institutional-liquidation" && this.tick === 65) {
+      this.shockObserved = true;
+      this.eventLabel = "Institutional parent order activated";
+      this.recordEvent("ShockTriggered", "institutional_parent_order", {
+        childOrderQuantity: 145,
+        scheduledEndTick: 78,
+      });
+      this.alert(
+        "critical",
+        "Institutional liquidation",
+        "A scheduled parent sell order began releasing child orders.",
+      );
+    }
+    if (scenario === "volatility-feedback" && this.tick === 60) {
+      this.fundamentalPrice = round(this.fundamentalPrice * 0.98);
+      this.shockObserved = true;
+      this.eventLabel = "Volatility feedback shock";
+      this.recordEvent("ShockTriggered", "feedback_loop_seed", {
+        fundamentalMovePct: -2,
+      });
+      this.alert(
+        "warning",
+        "Feedback loop initiated",
+        "A modest value shock activated stronger momentum responses.",
+      );
+    }
+    if (scenario === "cancellation-surge" && this.tick === 55) {
+      this.shockObserved = true;
+      this.eventLabel = "Abnormal cancellation burst";
+      this.recordEvent("ShockTriggered", "quote_cancellation_surge", {
+        scheduledEndTick: 74,
+      });
+      this.alert(
+        "warning",
+        "Cancellation surge",
+        "Displayed liquidity began disappearing unusually quickly.",
+      );
+    }
+    if (scenario === "cancellation-surge" && this.tick === 60) {
+      this.recordEvent("SurveillanceAlert", "abnormal_cancellation_pattern", {
+        label: "Potential layering-like pattern detected",
+        legalConclusion: false,
+      });
+      this.alert(
+        "critical",
+        "Potential layering-like pattern detected",
+        "Synthetic cancellation activity crossed the configured surveillance pattern threshold; this is not a legal conclusion.",
+      );
+    }
+    if (scenario === "exchange-outage" && this.tick === 65) {
+      this.shockObserved = true;
+      this.haltUntilTick = 75;
+      this.book.halt("synthetic_exchange_outage");
+      this.collectCoreEvents();
+      this.recordEvent("ShockTriggered", "synthetic_exchange_outage", {
+        resumeTick: 75,
+      });
+      this.alert(
+        "critical",
+        "Exchange outage",
+        "The synthetic venue stopped accepting orders for ten logical ticks.",
+      );
+    }
+    if (scenario === "tick-size-experiment" && this.tick === 70) {
+      this.shockObserved = true;
+      const previousTickSize = this.config.policies.tickSize;
+      this.config.policies.tickSize = 0.05;
+      this.book.setPolicies(this.config.policies);
+      this.recordEvent("ShockTriggered", "tick_size_regime_change", {
+        previousTickSize,
+        newTickSize: 0.05,
+      });
+      this.recordEvent("PolicyChanged", "tick_size_changed", {
+        tickSize: 0.05,
+      });
+      this.alert(
+        "info",
+        "Tick size changed",
+        "New orders now use a $0.05 minimum price increment.",
+      );
+    }
   }
 
   private act(agent: AgentState): void {
     if (!agent.active) return;
-    if ((this.tick + agent.latencyTicks) % (agent.latencyTicks + 1) !== 0)
+    if (
+      (this.tick + agent.latency.decisionTicks) %
+        (agent.latency.decisionTicks + 1) !==
+      0
+    )
       return;
+    const observed = this.observedMarket(agent);
+    agent.observedPrice = observed.price;
+    agent.privateValuation = observed.fundamental;
     if (
       agent.kind === "latency" &&
       this.config.policies.speedBumpTicks > 0 &&
@@ -395,7 +646,10 @@ export class MarketSimulation {
         this.tick <= 86) ||
       (this.config.scenario === "liquidity-drought" &&
         this.tick >= 60 &&
-        this.tick <= 120);
+        this.tick <= 120) ||
+      (this.config.scenario === "cancellation-surge" &&
+        this.tick >= 55 &&
+        this.tick <= 74);
     if (withdrawal) {
       this.cancelAgentOrders(
         agent,
@@ -411,7 +665,7 @@ export class MarketSimulation {
     );
     const inventorySkew = (agent.inventory - 1_000) * 0.0008;
     const halfSpread = 0.035 + Math.abs(agent.inventory - 1_000) * 0.0001;
-    const center = this.fundamentalPrice - inventorySkew;
+    const center = agent.privateValuation - inventorySkew;
     const quantity = 22;
     this.submit(
       agent,
@@ -452,7 +706,7 @@ export class MarketSimulation {
         agentKind: agent.kind,
         side,
         type,
-        price: type === "limit" ? this.lastPrice + offset : undefined,
+        price: type === "limit" ? agent.observedPrice + offset : undefined,
         quantity,
       },
       "Submitted heterogeneous retail-like flow",
@@ -462,7 +716,7 @@ export class MarketSimulation {
   private actMomentum(agent: AgentState): void {
     if (this.tick % 4 !== 0 || this.history.length < 8) return;
     const earlier = this.history.at(-8)!.price;
-    const trend = (this.lastPrice - earlier) / earlier;
+    const trend = (agent.observedPrice - earlier) / earlier;
     if (Math.abs(trend) < 0.0004) return;
     this.submit(
       agent,
@@ -471,7 +725,14 @@ export class MarketSimulation {
         agentKind: agent.kind,
         side: trend > 0 ? "buy" : "sell",
         type: "market",
-        quantity: clamp(Math.round(Math.abs(trend) * 4_000), 3, 18),
+        quantity: clamp(
+          Math.round(
+            Math.abs(trend) *
+              (this.config.scenario === "volatility-feedback" ? 7_000 : 4_000),
+          ),
+          3,
+          this.config.scenario === "volatility-feedback" ? 30 : 18,
+        ),
       },
       `Followed ${trend > 0 ? "positive" : "negative"} short-horizon price momentum`,
     );
@@ -479,8 +740,8 @@ export class MarketSimulation {
 
   private actValue(agent: AgentState): void {
     if (this.tick % 5 !== 0) return;
-    const mid = this.book.view().midPrice ?? this.lastPrice;
-    const gap = (this.fundamentalPrice - mid) / this.fundamentalPrice;
+    const gap =
+      (agent.privateValuation - agent.observedPrice) / agent.privateValuation;
     if (Math.abs(gap) < 0.0007) return;
     this.submit(
       agent,
@@ -497,9 +758,12 @@ export class MarketSimulation {
 
   private actInstitutional(agent: AgentState): void {
     if (
-      this.config.scenario === "flash-crash" &&
-      this.tick >= 70 &&
-      this.tick <= 78
+      (this.config.scenario === "flash-crash" &&
+        this.tick >= 70 &&
+        this.tick <= 78) ||
+      (this.config.scenario === "institutional-liquidation" &&
+        this.tick >= 65 &&
+        this.tick <= 78)
     ) {
       this.submit(
         agent,
@@ -508,7 +772,8 @@ export class MarketSimulation {
           agentKind: agent.kind,
           side: "sell",
           type: "market",
-          quantity: 220,
+          quantity:
+            this.config.scenario === "institutional-liquidation" ? 145 : 220,
         },
         "Executed one child order from a large sell program",
       );
@@ -521,7 +786,7 @@ export class MarketSimulation {
           agentKind: agent.kind,
           side,
           type: "limit",
-          price: this.fundamentalPrice + (side === "buy" ? -0.08 : 0.08),
+          price: agent.privateValuation + (side === "buy" ? -0.08 : 0.08),
           quantity: 25,
         },
         "Worked a patient institutional limit order",
@@ -531,8 +796,8 @@ export class MarketSimulation {
 
   private actLatency(agent: AgentState): void {
     if (this.tick % 2 !== 0) return;
-    const mid = this.book.view().midPrice ?? this.lastPrice;
-    const gap = (this.fundamentalPrice - mid) / this.fundamentalPrice;
+    const gap =
+      (agent.privateValuation - agent.observedPrice) / agent.privateValuation;
     const threshold =
       this.config.scenario === "latency-race" ? 0.00012 : 0.00035;
     if (Math.abs(gap) < threshold) return;
@@ -554,29 +819,130 @@ export class MarketSimulation {
     request: OrderRequest,
     reason: string,
     recordDecision = true,
+    bypassLatency = false,
   ): void {
     const quantity = this.affordableQuantity(agent, request);
     if (quantity <= 0) {
       agent.lastDecision = "Order rejected by cash or inventory constraint";
       return;
     }
-    const result = this.book.submit({ ...request, quantity });
+    const adjustedRequest = { ...request, quantity };
+    if (recordDecision)
+      this.recordAgentDecision(agent, adjustedRequest, reason);
+
+    const deliveryTicks =
+      agent.latency.transmissionTicks + agent.latency.exchangeProcessingTicks;
+    if (!bypassLatency && recordDecision && deliveryTicks > 0) {
+      const dueTick = this.tick + deliveryTicks;
+      this.pendingOrders.push({
+        dueTick,
+        agentId: agent.id,
+        request: adjustedRequest,
+        reason,
+      });
+      agent.lastDecision = `${reason} · queued for exchange arrival at T${dueTick}`;
+      return;
+    }
+
+    const result = this.book.submit(adjustedRequest);
+    this.collectCoreEvents();
     if (!result.accepted) {
       agent.lastDecision = result.rejectedReason ?? "Order rejected";
       return;
     }
     agent.submittedQuantity += quantity;
     agent.lastDecision = reason;
-    if (recordDecision) {
-      this.decisions.push({
-        tick: this.tick,
-        agentId: agent.id,
-        agentKind: agent.kind,
-        action: `${request.side.toUpperCase()} ${quantity} ${request.type}`,
-        reason,
-      });
-    }
     for (const trade of result.trades) this.processTrade(trade);
+  }
+
+  private flushPendingOrders(): void {
+    const due = this.pendingOrders.filter(
+      (order) => order.dueTick <= this.tick,
+    );
+    this.pendingOrders = this.pendingOrders.filter(
+      (order) => order.dueTick > this.tick,
+    );
+    for (const pending of due) {
+      const agent = this.agents.find(
+        (candidate) => candidate.id === pending.agentId,
+      );
+      if (!agent) continue;
+      this.submit(agent, pending.request, pending.reason, false, true);
+    }
+  }
+
+  private recordAgentDecision(
+    agent: AgentState,
+    request: OrderRequest,
+    reason: string,
+  ): void {
+    const metrics = this.metrics();
+    const riskUtilization =
+      Math.abs(agent.inventory - 1_000) /
+      Math.max(1, agent.inventoryLimit - 1_000);
+    const event = this.eventStore.append({
+      simulationTimestamp: this.tick,
+      eventType: "AgentStateChange",
+      agentId: agent.id,
+      orderId: null,
+      parentOrderId: null,
+      side: request.side,
+      price: request.price ?? null,
+      quantity: request.quantity,
+      remainingQuantity: request.quantity,
+      reasonCode: "strategy_decision",
+      metadata: {
+        agentKind: agent.kind,
+        action: request.type,
+        objective: agent.currentObjective,
+        observedPrice: agent.observedPrice,
+        fundamentalEstimate: agent.privateValuation,
+        inventory: agent.inventory,
+        inventoryLimit: agent.inventoryLimit,
+        riskUtilization: round(riskUtilization, 4),
+        latency: { ...agent.latency },
+        reason,
+        variables: {
+          spreadBps: round(metrics.spreadBps, 2),
+          volatilityBps: round(metrics.volatilityBps, 2),
+          priceGapBps: round(
+            ((agent.privateValuation - agent.observedPrice) /
+              agent.privateValuation) *
+              10_000,
+            2,
+          ),
+          visibleDepth: metrics.depth,
+        },
+      },
+    });
+    this.decisions.push({
+      sequenceNumber: event.sequenceNumber,
+      tick: this.tick,
+      agentId: agent.id,
+      agentKind: agent.kind,
+      action: `${request.side.toUpperCase()} ${request.quantity} ${request.type}${
+        request.price === undefined ? "" : ` @ $${request.price.toFixed(2)}`
+      }`,
+      reason,
+      observedPrice: agent.observedPrice,
+      fundamentalEstimate: agent.privateValuation,
+      inventory: agent.inventory,
+      inventoryLimit: agent.inventoryLimit,
+      riskUtilization: round(riskUtilization, 4),
+      latency: { ...agent.latency },
+      objective: agent.currentObjective,
+      variables: {
+        spreadBps: round(metrics.spreadBps, 2),
+        volatilityBps: round(metrics.volatilityBps, 2),
+        priceGapBps: round(
+          ((agent.privateValuation - agent.observedPrice) /
+            agent.privateValuation) *
+            10_000,
+          2,
+        ),
+        visibleDepth: metrics.depth,
+      },
+    });
   }
 
   private affordableQuantity(agent: AgentState, request: OrderRequest): number {
@@ -618,6 +984,9 @@ export class MarketSimulation {
     buyer.executedQuantity += trade.quantity;
     buyer.trades += 1;
     seller.cash = round(seller.cash + notional - trade.sellerFee);
+    this.exchangeFeeRevenue = round(
+      this.exchangeFeeRevenue + trade.buyerFee + trade.sellerFee,
+    );
     seller.inventory -= trade.quantity;
     seller.executedQuantity += trade.quantity;
     seller.trades += 1;
@@ -636,10 +1005,23 @@ export class MarketSimulation {
           10_000,
       );
     }
+    if (trade.buyerKind === "institutional") {
+      this.institutionalShortfalls.push(
+        ((trade.price - this.fundamentalPrice) / this.fundamentalPrice) *
+          10_000,
+      );
+    }
+    if (trade.sellerKind === "institutional") {
+      this.institutionalShortfalls.push(
+        ((this.fundamentalPrice - trade.price) / this.fundamentalPrice) *
+          10_000,
+      );
+    }
   }
 
   private cancelAgentOrders(agent: AgentState, reason: string): void {
     const orders = this.book.getOrders(agent.id);
+    const decisionMetrics = orders.length > 0 ? this.metrics() : null;
     for (const order of orders) {
       const ratio = agent.cancellations / Math.max(agent.trades, 1);
       if (ratio >= this.config.policies.maxCancelToTradeRatio) {
@@ -647,15 +1029,56 @@ export class MarketSimulation {
         return;
       }
       const result = this.book.cancel(order.id, agent.id);
+      this.collectCoreEvents();
       if (result.cancelled) {
         agent.cancellations += 1;
         agent.lastDecision = reason;
+        const event = this.eventStore.append({
+          simulationTimestamp: this.tick,
+          eventType: "AgentStateChange",
+          agentId: agent.id,
+          orderId: order.id,
+          parentOrderId: null,
+          side: order.side,
+          price: order.price,
+          quantity: order.remaining,
+          remainingQuantity: order.remaining,
+          reasonCode: "strategy_cancellation",
+          metadata: {
+            agentKind: agent.kind,
+            objective: agent.currentObjective,
+          },
+        });
+        this.decisions.push({
+          sequenceNumber: event.sequenceNumber,
+          tick: this.tick,
+          agentId: agent.id,
+          agentKind: agent.kind,
+          action: `CANCEL ${order.side.toUpperCase()} ${order.remaining} @ $${order.price.toFixed(2)}`,
+          reason,
+          observedPrice: agent.observedPrice,
+          fundamentalEstimate: agent.privateValuation,
+          inventory: agent.inventory,
+          inventoryLimit: agent.inventoryLimit,
+          riskUtilization: round(
+            Math.abs(agent.inventory - 1_000) /
+              Math.max(1, agent.inventoryLimit - 1_000),
+            4,
+          ),
+          latency: { ...agent.latency },
+          objective: agent.currentObjective,
+          variables: {
+            spreadBps: round(decisionMetrics?.spreadBps ?? 0, 2),
+            volatilityBps: round(decisionMetrics?.volatilityBps ?? 0, 2),
+            queueAgeTicks: this.tick - order.createdTick,
+            cancellations: agent.cancellations,
+          },
+        });
       }
     }
   }
 
-  private captureHistory(): void {
-    const book = this.book.view();
+  private captureHistory(book: BookView = this.book.view()): void {
     const price = book.midPrice ?? this.lastPrice;
     const spreadBps = book.spread ? (book.spread / price) * 10_000 : 0;
     this.history.push({
@@ -670,14 +1093,21 @@ export class MarketSimulation {
     }
   }
 
-  private checkCircuitBreaker(): void {
+  private checkCircuitBreaker(book: BookView = this.book.view()): void {
     if (!this.config.policies.circuitBreaker || this.haltUntilTick !== null)
       return;
-    const price = this.book.view().midPrice ?? this.lastPrice;
+    const price = book.midPrice ?? this.lastPrice;
     const movePct =
       (Math.abs(price - this.referencePrice) / this.referencePrice) * 100;
     if (movePct >= this.config.policies.circuitBreakerThresholdPct) {
       this.haltUntilTick = this.tick + this.config.policies.haltTicks;
+      this.book.halt("reference_price_threshold");
+      this.collectCoreEvents();
+      this.recordEvent("RegulatoryTrigger", "circuit_breaker_threshold", {
+        movePct: round(movePct, 4),
+        thresholdPct: this.config.policies.circuitBreakerThresholdPct,
+        haltUntilTick: this.haltUntilTick,
+      });
       this.status = "halted";
       this.eventLabel = "Circuit breaker activated";
       this.alert(
@@ -688,7 +1118,7 @@ export class MarketSimulation {
     }
   }
 
-  private checkRecovery(): void {
+  private checkRecovery(metrics: MarketMetrics = this.metrics()): void {
     const shockTick = scenarioById(this.config.scenario).shockTick;
     if (
       !this.shockObserved ||
@@ -696,7 +1126,6 @@ export class MarketSimulation {
       this.recoveryTicks !== null
     )
       return;
-    const metrics = this.metrics(this.book.view());
     if (
       metrics.priceErrorBps >= 80 ||
       metrics.spreadBps >= 40 ||
@@ -729,6 +1158,7 @@ export class MarketSimulation {
       agents: this.agents,
       totalVolume: this.totalVolume,
       retailSlippages: this.retailSlippages,
+      institutionalShortfalls: this.institutionalShortfalls,
       recoveryTicks: this.recoveryTicks,
     });
   }
@@ -746,30 +1176,152 @@ export class MarketSimulation {
       detail,
     });
   }
+
+  private collectCoreEvents(): void {
+    this.eventStore.ingestCore(this.book.drainCoreEvents());
+  }
+
+  private recordEvent(
+    eventType: MarketEventType,
+    reasonCode: string,
+    metadata: Record<string, unknown> = {},
+  ): MarketEvent {
+    return this.eventStore.append({
+      simulationTimestamp: this.tick,
+      eventType,
+      agentId: null,
+      orderId: null,
+      parentOrderId: null,
+      side: null,
+      price: null,
+      quantity: null,
+      remainingQuantity: null,
+      reasonCode,
+      metadata,
+    });
+  }
+
+  private conservationAudit(): MarketSnapshot["conservation"] {
+    const currentCash = round(
+      this.agents.reduce((total, agent) => total + agent.cash, 0),
+    );
+    const currentInventory = this.agents.reduce(
+      (total, agent) => total + agent.inventory,
+      0,
+    );
+    return {
+      initialCash: this.initialCash,
+      currentCash,
+      exchangeFeeRevenue: this.exchangeFeeRevenue,
+      initialInventory: this.initialInventory,
+      currentInventory,
+      cashConserved:
+        Math.abs(currentCash + this.exchangeFeeRevenue - this.initialCash) <
+        0.02,
+      inventoryConserved: currentInventory === this.initialInventory,
+    };
+  }
+
+  private causalChain(): CausalStep[] {
+    const events = this.eventStore.all();
+    const shock = events.find((event) => event.eventType === "ShockTriggered");
+    if (!shock) return [];
+    const candidates = [
+      events.find(
+        (event) =>
+          event.eventType === "CancelOrder" &&
+          event.agentId?.startsWith("market-maker") &&
+          event.simulationTimestamp >= shock.simulationTimestamp - 10,
+      ),
+      shock,
+      events.find(
+        (event) =>
+          event.sequenceNumber > shock.sequenceNumber &&
+          event.eventType === "NewOrder" &&
+          event.metadata.agentKind === "institutional",
+      ),
+      events.find(
+        (event) =>
+          event.sequenceNumber > shock.sequenceNumber &&
+          (event.eventType === "Trade" || event.eventType === "PartialFill") &&
+          event.side === "sell",
+      ),
+      events.find(
+        (event) =>
+          event.sequenceNumber > shock.sequenceNumber &&
+          event.eventType === "RegulatoryTrigger",
+      ),
+      events.find(
+        (event) =>
+          event.sequenceNumber > shock.sequenceNumber &&
+          event.eventType === "TradingResume",
+      ),
+    ].filter((event): event is MarketEvent => event !== undefined);
+
+    const label = (event: MarketEvent): string => {
+      if (event.eventType === "CancelOrder")
+        return "Quoted liquidity withdrawn";
+      if (event.eventType === "ShockTriggered")
+        return "Scenario shock activated";
+      if (event.eventType === "NewOrder")
+        return "Institutional child order arrived";
+      if (event.eventType === "Trade" || event.eventType === "PartialFill") {
+        return "Bid-side liquidity consumed";
+      }
+      if (event.eventType === "RegulatoryTrigger")
+        return "Market safeguard triggered";
+      return "Continuous trading resumed";
+    };
+    const evidence = (event: MarketEvent): string => {
+      if (event.eventType === "NewOrder") {
+        return `${event.side ?? "order"} order ${event.orderId ?? ""} for ${event.quantity ?? 0} units`;
+      }
+      if (event.eventType === "Trade" || event.eventType === "PartialFill") {
+        return `${event.quantity ?? 0} units executed at $${event.price?.toFixed(2) ?? "—"}`;
+      }
+      if (event.eventType === "RegulatoryTrigger") {
+        return `${String(event.metadata.movePct)}% move exceeded ${String(event.metadata.thresholdPct)}% threshold`;
+      }
+      return event.reasonCode.replaceAll("_", " ");
+    };
+    return candidates.map((event) => ({
+      sequenceNumber: event.sequenceNumber,
+      tick: event.simulationTimestamp,
+      label: label(event),
+      evidence: evidence(event),
+    }));
+  }
 }
 
 const experiment = (
   label: string,
   config: SimulationConfig,
   policies: PolicyConfig,
+  bookFactory: BookFactory,
 ): ExperimentResult => {
-  const simulation = new MarketSimulation({
-    ...config,
-    policies: { ...policies },
-  });
-  const snapshots: MarketSnapshot[] = [];
-  while (snapshots.at(-1)?.status !== "complete") {
-    snapshots.push(simulation.step());
+  const simulation = new MarketSimulation(
+    {
+      ...config,
+      policies: { ...policies },
+    },
+    bookFactory,
+  );
+  const samples: MarketMetrics[] = [];
+  let status: SimulationStatus = "ready";
+  while (status !== "complete") {
+    const sample = simulation.advanceForAnalysis();
+    status = sample.status;
+    samples.push(sample.metrics);
   }
-  const finalSnapshot = snapshots.at(-1)!;
+  const finalSnapshot = simulation.snapshot();
   const peakSpreadBps = Math.max(
-    ...snapshots.map((snapshot) => snapshot.metrics.spreadBps),
+    ...samples.map((metrics) => metrics.spreadBps),
   );
   const peakVolatilityBps = Math.max(
-    ...snapshots.map((snapshot) => snapshot.metrics.volatilityBps),
+    ...samples.map((metrics) => metrics.volatilityBps),
   );
   const peakPriceErrorBps = Math.max(
-    ...snapshots.map((snapshot) => snapshot.metrics.priceErrorBps),
+    ...samples.map((metrics) => metrics.priceErrorBps),
   );
   const maximumDrawdownPct =
     ((config.initialPrice -
@@ -777,7 +1329,7 @@ const experiment = (
       config.initialPrice) *
     100;
   const worstQualityScore = Math.min(
-    ...snapshots.map((snapshot) => snapshot.metrics.marketQualityScore),
+    ...samples.map((metrics) => metrics.marketQualityScore),
   );
   const resilienceScore = clamp(
     100 /
@@ -810,6 +1362,7 @@ const experiment = (
 
 export const runCounterfactual = (
   config: SimulationConfig,
+  bookFactory: BookFactory = defaultBookFactory,
 ): CounterfactualResult => {
   const baselinePolicies: PolicyConfig = {
     ...config.policies,
@@ -818,11 +1371,17 @@ export const runCounterfactual = (
     minimumRestingTicks: 0,
     maxCancelToTradeRatio: 1_000,
   };
-  const baseline = experiment("Unregulated baseline", config, baselinePolicies);
+  const baseline = experiment(
+    "Unregulated baseline",
+    config,
+    baselinePolicies,
+    bookFactory,
+  );
   const intervention = experiment(
     "Policy intervention",
     config,
     config.policies,
+    bookFactory,
   );
   return {
     baseline,
@@ -844,5 +1403,107 @@ export const runCounterfactual = (
         intervention.stressMetrics.resilienceScore -
         baseline.stressMetrics.resilienceScore,
     },
+  };
+};
+
+const average = (values: number[]): number =>
+  values.reduce((total, value) => total + value, 0) /
+  Math.max(values.length, 1);
+
+const quantile = (values: number[], probability: number): number => {
+  const sorted = [...values].sort((left, right) => left - right);
+  if (sorted.length === 0) return 0;
+  const position = (sorted.length - 1) * probability;
+  const lower = Math.floor(position);
+  const weight = position - lower;
+  return sorted[lower + 1] === undefined
+    ? sorted[lower]!
+    : sorted[lower]! * (1 - weight) + sorted[lower + 1]! * weight;
+};
+
+export const runBatchExperiment = (
+  config: SimulationConfig,
+  runs: number,
+  bookFactory: BookFactory = defaultBookFactory,
+): BatchExperimentResult => {
+  const count = clamp(Math.floor(runs), 2, 100);
+  const paired = Array.from({ length: count }, (_, index) =>
+    runCounterfactual({ ...config, seed: config.seed + index }, bookFactory),
+  );
+  const metrics = [
+    {
+      metric: "Peak quoted spread",
+      unit: "bps",
+      baseline: (run: CounterfactualResult) =>
+        run.baseline.stressMetrics.peakSpreadBps,
+      intervention: (run: CounterfactualResult) =>
+        run.intervention.stressMetrics.peakSpreadBps,
+      improvement: (baseline: number, intervention: number) =>
+        baseline - intervention,
+    },
+    {
+      metric: "Peak volatility",
+      unit: "bps",
+      baseline: (run: CounterfactualResult) =>
+        run.baseline.stressMetrics.peakVolatilityBps,
+      intervention: (run: CounterfactualResult) =>
+        run.intervention.stressMetrics.peakVolatilityBps,
+      improvement: (baseline: number, intervention: number) =>
+        baseline - intervention,
+    },
+    {
+      metric: "Peak price-discovery error",
+      unit: "bps",
+      baseline: (run: CounterfactualResult) =>
+        run.baseline.stressMetrics.peakPriceErrorBps,
+      intervention: (run: CounterfactualResult) =>
+        run.intervention.stressMetrics.peakPriceErrorBps,
+      improvement: (baseline: number, intervention: number) =>
+        baseline - intervention,
+    },
+    {
+      metric: "Maximum drawdown",
+      unit: "%",
+      baseline: (run: CounterfactualResult) =>
+        run.baseline.stressMetrics.maximumDrawdownPct,
+      intervention: (run: CounterfactualResult) =>
+        run.intervention.stressMetrics.maximumDrawdownPct,
+      improvement: (baseline: number, intervention: number) =>
+        baseline - intervention,
+    },
+    {
+      metric: "Resilience score",
+      unit: "points",
+      baseline: (run: CounterfactualResult) =>
+        run.baseline.stressMetrics.resilienceScore,
+      intervention: (run: CounterfactualResult) =>
+        run.intervention.stressMetrics.resilienceScore,
+      improvement: (baseline: number, intervention: number) =>
+        intervention - baseline,
+    },
+  ];
+  return {
+    runs: count,
+    firstSeed: config.seed,
+    lastSeed: config.seed + count - 1,
+    scenario: config.scenario,
+    summaries: metrics.map((metric) => {
+      const baseline = paired.map(metric.baseline);
+      const intervention = paired.map(metric.intervention);
+      const improvements = baseline.map((value, index) =>
+        metric.improvement(value, intervention[index]!),
+      );
+      return {
+        metric: metric.metric,
+        unit: metric.unit,
+        baselineMean: average(baseline),
+        interventionMean: average(intervention),
+        medianImprovement: quantile(improvements, 0.5),
+        intervalLow: quantile(improvements, 0.025),
+        intervalHigh: quantile(improvements, 0.975),
+        improvementFrequency:
+          improvements.filter((value) => value > 0).length / count,
+      };
+    }),
   };
 };

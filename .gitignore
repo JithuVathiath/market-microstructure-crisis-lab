@@ -6,4 +6,4 @@ test-results/
 *.tsbuildinfo
 .DS_Store
 .vite/
-
+crates/exchange-core/target/

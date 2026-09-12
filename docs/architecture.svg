@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title description">
   <title id="title">Market Crisis Lab architecture</title>
-  <description id="description">A browser interface sends commands to a background worker containing market agents, the matching engine, policy layer, and measurement system. Replays and reports are exported locally.</description>
+  <description id="description">A React interface sends commands to a TypeScript worker. Agents call a Rust and WebAssembly exchange core whose canonical events feed replay, analytics and local exports.</description>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07131e"/><stop offset="1" stop-color="#0d2231"/></linearGradient>
     <filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -15,15 +15,15 @@
     <text x="82" y="226" fill="#eaf3f7" font-size="18" font-weight="700">React control room</text>
     <text x="82" y="263" fill="#8fa8b8" font-size="14">• Live order book</text><text x="82" y="292" fill="#8fa8b8" font-size="14">• Policy controls</text><text x="82" y="321" fill="#8fa8b8" font-size="14">• Agent monitor</text><text x="82" y="350" fill="#8fa8b8" font-size="14">• Time-travel replay</text><text x="82" y="379" fill="#8fa8b8" font-size="14">• Manual order ticket</text>
     <rect x="390" y="135" width="478" height="290" rx="18" fill="#0a1a27" stroke="#3be1c2" stroke-opacity=".48"/>
-    <text x="420" y="175" fill="#3be1c2" font-family="monospace" font-size="12">BACKGROUND SIMULATION WORKER</text>
+    <text x="420" y="175" fill="#3be1c2" font-family="monospace" font-size="12">TYPESCRIPT WEB WORKER + WASM</text>
     <rect x="420" y="201" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="440" y="232" fill="#eaf3f7" font-size="16" font-weight="700">Market agents</text><text x="440" y="259" fill="#89a4b5" font-size="12">6 strategies · seeded RNG</text>
-    <rect x="648" y="201" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="668" y="232" fill="#eaf3f7" font-size="16" font-weight="700">Matching engine</text><text x="668" y="259" fill="#89a4b5" font-size="12">Price-time priority</text>
+    <rect x="648" y="201" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="668" y="232" fill="#eaf3f7" font-size="16" font-weight="700">Rust exchange core</text><text x="668" y="259" fill="#89a4b5" font-size="12">WASM · FIFO matching</text>
     <rect x="420" y="314" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="440" y="345" fill="#eaf3f7" font-size="16" font-weight="700">Governance layer</text><text x="440" y="372" fill="#89a4b5" font-size="12">Circuit breaker · speed bump</text>
-    <rect x="648" y="314" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="668" y="345" fill="#eaf3f7" font-size="16" font-weight="700">Measurement</text><text x="668" y="372" fill="#89a4b5" font-size="12">Quality · fairness · recovery</text>
+    <rect x="648" y="314" width="190" height="82" rx="9" fill="#102839" stroke="#275269"/><text x="668" y="345" fill="#eaf3f7" font-size="16" font-weight="700">Event + replay</text><text x="668" y="372" fill="#89a4b5" font-size="12">Hash · forensics · metrics</text>
     <rect x="946" y="150" width="200" height="260" rx="14" fill="#0d1f2d" stroke="#28516a"/>
     <text x="972" y="190" fill="#ffca65" font-family="monospace" font-size="12">EVIDENCE OUTPUT</text>
     <text x="972" y="228" fill="#eaf3f7" font-size="17" font-weight="700">Local exports</text>
-    <text x="972" y="269" fill="#8fa8b8" font-size="14">Replay JSON</text><text x="972" y="300" fill="#8fa8b8" font-size="14">Incident report</text><text x="972" y="331" fill="#8fa8b8" font-size="14">Paired comparison</text><text x="972" y="362" fill="#8fa8b8" font-size="14">Audit metadata</text>
+    <text x="972" y="269" fill="#8fa8b8" font-size="14">Replay JSON v2</text><text x="972" y="300" fill="#8fa8b8" font-size="14">Incident report</text><text x="972" y="331" fill="#8fa8b8" font-size="14">Paired + batch</text><text x="972" y="362" fill="#8fa8b8" font-size="14">Event integrity hash</text>
   </g>
   <path d="M312 280H382" stroke="#467186" stroke-width="2" marker-end="url(#arrow)"/><path d="M869 280H938" stroke="#467186" stroke-width="2" marker-end="url(#arrow)"/>
   <circle cx="629" cy="280" r="5" fill="#3be1c2" filter="url(#glow)"/><path d="M610 242H648M515 283V314M743 283V314M610 355H648" stroke="#335d72" stroke-width="2"/>

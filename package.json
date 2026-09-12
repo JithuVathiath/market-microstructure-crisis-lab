@@ -1,10 +1,10 @@
 {
   "name": "market-microstructure-crisis-lab",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "packageManager": "pnpm@10.17.1",
   "type": "module",
-  "description": "Interactive market microstructure, crisis, and governance laboratory.",
+  "description": "Deterministic Rust/WebAssembly market microstructure, crisis, replay, and governance laboratory.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -17,7 +17,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "benchmark": "tsx scripts/benchmark.ts",
-    "screenshot": "tsx scripts/capture-preview.ts"
+    "screenshot": "tsx scripts/capture-preview.ts",
+    "rust:format:check": "cargo fmt --manifest-path crates/exchange-core/Cargo.toml -- --check",
+    "rust:lint": "cargo clippy --manifest-path crates/exchange-core/Cargo.toml --all-targets -- -D warnings",
+    "rust:test": "cargo test --manifest-path crates/exchange-core/Cargo.toml",
+    "wasm:build": "wasm-pack build crates/exchange-core --target web --release --out-dir ../../src/wasm/pkg"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

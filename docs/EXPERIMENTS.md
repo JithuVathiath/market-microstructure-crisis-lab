@@ -10,7 +10,8 @@
 4. Select **Compare against unregulated market**.
 5. Compare spread, volatility, pricing error, and the composite score.
 6. Export the replay and incident report.
-7. Repeat across at least 30 seeds before describing an average effect.
+7. Switch to **Research Mode** and run 25 or 50 paired seeds before describing
+   an average model effect.
 
 ## Interpretation checklist
 
@@ -20,10 +21,10 @@
 - Report configuration, seed range, scenario, and model version.
 - State that results are synthetic and model-dependent.
 
-## Extension ideas
+## Export checklist
 
-- Batch experiments with bootstrap confidence intervals.
-- Add a closing auction and compare continuous versus call-market recovery.
-- Estimate agent-specific implementation shortfall.
-- Introduce fragmented venues and order routing.
-- Calibrate stylised parameters to published empirical ranges.
+- Export replay JSON and verify that re-import succeeds.
+- Export the incident report after running the paired comparison so both worlds
+  are included.
+- Record application version, event hash, seed range, scenario, and all policies.
+- Report the 95% simulation interval and improvement frequency, not only the mean.
