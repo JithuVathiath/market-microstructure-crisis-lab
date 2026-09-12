@@ -6,11 +6,24 @@ export type ScenarioId =
   | "stable"
   | "flash-crash"
   | "liquidity-drought"
+  | "institutional-liquidation"
   | "information-shock"
-  | "latency-race";
+  | "latency-race"
+  | "volatility-feedback"
+  | "cancellation-surge"
+  | "exchange-outage"
+  | "tick-size-experiment";
 
 export type AgentKind =
   "market-maker" | "noise" | "momentum" | "value" | "institutional" | "latency";
+
+export interface LatencyProfile {
+  label: string;
+  marketDataTicks: number;
+  decisionTicks: number;
+  transmissionTicks: number;
+  exchangeProcessingTicks: number;
+}
 
 export interface OrderRequest {
   agentId: string;
@@ -51,6 +64,18 @@ export interface BookLevel {
   orderCount: number;
 }
 
+export interface QueueEntry {
+  orderId: string;
+  agentId: string;
+  agentKind: AgentKind;
+  side: Side;
+  price: number;
+  remaining: number;
+  queuePosition: number;
+  createdTick: number;
+  ageTicks: number;
+}
+
 export interface BookView {
   bids: BookLevel[];
   asks: BookLevel[];
@@ -58,6 +83,63 @@ export interface BookView {
   bestAsk: number | null;
   spread: number | null;
   midPrice: number | null;
+  bidQueue: QueueEntry[];
+  askQueue: QueueEntry[];
+}
+
+export interface CoreExchangeEvent {
+  sequenceNumber: number;
+  simulationTimestamp: number;
+  eventType: string;
+  agentId: string | null;
+  orderId: string | null;
+  parentOrderId: string | null;
+  side: Side | null;
+  price: number | null;
+  quantity: number | null;
+  remainingQuantity: number | null;
+  reasonCode: string;
+  metadata: Record<string, unknown>;
+}
+
+export type MarketEventType =
+  | "NewOrder"
+  | "CancelOrder"
+  | "ReplaceOrder"
+  | "Trade"
+  | "PartialFill"
+  | "OrderExpired"
+  | "TradingHalt"
+  | "TradingResume"
+  | "RegulatoryTrigger"
+  | "AgentStateChange"
+  | "ShockTriggered"
+  | "QuoteUpdated"
+  | "FundamentalValueUpdated"
+  | "PolicyChanged"
+  | "SurveillanceAlert";
+
+export interface MarketEvent {
+  sequenceNumber: number;
+  simulationTimestamp: number;
+  exchangeTimestamp: number;
+  eventType: MarketEventType;
+  agentId: string | null;
+  orderId: string | null;
+  parentOrderId: string | null;
+  side: Side | null;
+  price: number | null;
+  quantity: number | null;
+  remainingQuantity: number | null;
+  reasonCode: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface CausalStep {
+  sequenceNumber: number;
+  tick: number;
+  label: string;
+  evidence: string;
 }
 
 export interface PolicyConfig {
@@ -80,6 +162,8 @@ export interface ScenarioDefinition {
   learningGoal: string;
   shockTick: number | null;
   accent: string;
+  suggestedMetrics: string[];
+  limitations: string;
 }
 
 export interface AgentState {
@@ -88,14 +172,19 @@ export interface AgentState {
   label: string;
   cash: number;
   inventory: number;
+  inventoryLimit: number;
+  riskTolerance: number;
+  observedPrice: number;
+  privateValuation: number;
   initialWealth: number;
   submittedQuantity: number;
   executedQuantity: number;
   cancellations: number;
   trades: number;
-  latencyTicks: number;
+  latency: LatencyProfile;
   active: boolean;
   lastDecision: string;
+  currentObjective: string;
 }
 
 export interface AgentView extends AgentState {
@@ -105,11 +194,20 @@ export interface AgentView extends AgentState {
 }
 
 export interface DecisionEvent {
+  sequenceNumber: number;
   tick: number;
   agentId: string;
   agentKind: AgentKind;
   action: string;
   reason: string;
+  observedPrice: number;
+  fundamentalEstimate: number;
+  inventory: number;
+  inventoryLimit: number;
+  riskUtilization: number;
+  latency: LatencyProfile;
+  objective: string;
+  variables: Record<string, number | string | boolean>;
 }
 
 export type AlertSeverity = "info" | "warning" | "critical" | "success";
@@ -134,6 +232,12 @@ export interface MarketMetrics {
   marketQualityScore: number;
   totalVolume: number;
   retailSlippageBps: number;
+  institutionalShortfallBps: number;
+  marketImpactBps: number;
+  microprice: number;
+  bookImbalance: number;
+  marketMakerInventoryRisk: number;
+  cancellationIntensity: number;
   recoveryTicks: number | null;
 }
 
@@ -161,6 +265,19 @@ export interface MarketSnapshot {
   priceHistory: PricePoint[];
   haltUntilTick: number | null;
   eventLabel: string;
+  latestSequenceNumber: number;
+  eventStreamHash: string;
+  recentEvents: MarketEvent[];
+  causalChain: CausalStep[];
+  conservation: {
+    initialCash: number;
+    currentCash: number;
+    exchangeFeeRevenue: number;
+    initialInventory: number;
+    currentInventory: number;
+    cashConserved: boolean;
+    inventoryConserved: boolean;
+  };
 }
 
 export interface SimulationConfig {
@@ -201,11 +318,35 @@ export interface CounterfactualResult {
   };
 }
 
+export interface BatchMetricSummary {
+  metric: string;
+  unit: string;
+  baselineMean: number;
+  interventionMean: number;
+  medianImprovement: number;
+  intervalLow: number;
+  intervalHigh: number;
+  improvementFrequency: number;
+}
+
+export interface BatchExperimentResult {
+  runs: number;
+  firstSeed: number;
+  lastSeed: number;
+  scenario: ScenarioId;
+  summaries: BatchMetricSummary[];
+}
+
 export interface ReplayFile {
-  schemaVersion: 1;
+  schemaVersion: 2;
   generatedAt: string;
+  applicationVersion: "2.0.0";
   application: "Market Microstructure Crisis Lab";
+  engine: "rust-wasm";
   config: SimulationConfig;
+  eventStream: MarketEvent[];
+  decisionLog: DecisionEvent[];
+  eventStreamHash: string;
   finalSnapshot: MarketSnapshot;
   disclaimer: string;
 }

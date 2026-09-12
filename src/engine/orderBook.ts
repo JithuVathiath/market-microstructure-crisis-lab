@@ -2,6 +2,7 @@ import type {
   AgentKind,
   BookLevel,
   BookView,
+  CoreExchangeEvent,
   Order,
   OrderRequest,
   PolicyConfig,
@@ -22,16 +23,37 @@ export interface CancellationResult {
   order: Order | null;
 }
 
+export interface ExchangeBook {
+  setTick(tick: number): void;
+  setPolicies(policies: PolicyConfig): void;
+  submit(request: OrderRequest): SubmissionResult;
+  cancel(orderId: string, agentId: string): CancellationResult;
+  replace(
+    orderId: string,
+    agentId: string,
+    price: number,
+    quantity: number,
+  ): SubmissionResult;
+  getOrders(agentId?: string): Order[];
+  view(levelCount?: number): BookView;
+  halt(reason: string): void;
+  resume(reason: string): void;
+  drainCoreEvents(): CoreExchangeEvent[];
+}
+
 const round = (value: number, digits = 8): number =>
   Number(value.toFixed(digits));
 
-export class LimitOrderBook {
+export class LimitOrderBook implements ExchangeBook {
   private bids: Order[] = [];
   private asks: Order[] = [];
   private sequence = 0;
   private orderCounter = 0;
   private tradeCounter = 0;
+  private eventCounter = 0;
   private tick = 0;
+  private halted = false;
+  private events: CoreExchangeEvent[] = [];
   private policies: PolicyConfig;
 
   constructor(policies: PolicyConfig) {
@@ -47,6 +69,14 @@ export class LimitOrderBook {
   }
 
   submit(request: OrderRequest): SubmissionResult {
+    if (this.halted) {
+      return {
+        accepted: false,
+        order: null,
+        trades: [],
+        rejectedReason: "trading halted",
+      };
+    }
     const validationError = this.validateRequest(request);
     if (validationError) {
       return {
@@ -71,11 +101,49 @@ export class LimitOrderBook {
       sequence: ++this.sequence,
       createdTick: this.tick,
     };
+    this.emit({
+      eventType: "NewOrder",
+      agentId: order.agentId,
+      orderId: order.id,
+      parentOrderId: null,
+      side: order.side,
+      price: order.type === "limit" ? order.price : null,
+      quantity: order.quantity,
+      remainingQuantity: order.remaining,
+      reasonCode: "accepted",
+      metadata: { agentKind: order.agentKind, orderType: order.type },
+    });
     const trades = this.match(order);
 
     if (order.remaining > 0 && order.type === "limit") {
       this.sideOrders(order.side).push(order);
       this.sortSide(order.side);
+      this.emit({
+        eventType: "QuoteUpdated",
+        agentId: order.agentId,
+        orderId: order.id,
+        parentOrderId: null,
+        side: order.side,
+        price: order.price,
+        quantity: order.quantity,
+        remainingQuantity: order.remaining,
+        reasonCode: "resting",
+        metadata: {},
+      });
+    } else {
+      this.emit({
+        eventType: "OrderExpired",
+        agentId: order.agentId,
+        orderId: order.id,
+        parentOrderId: null,
+        side: order.side,
+        price: order.type === "limit" ? order.price : null,
+        quantity: order.quantity,
+        remainingQuantity: order.remaining,
+        reasonCode:
+          order.remaining === 0 ? "fully_filled" : "market_remainder_cancelled",
+        metadata: {},
+      });
     }
     return {
       accepted: true,
@@ -101,6 +169,18 @@ export class LimitOrderBook {
         };
       }
       orders.splice(index, 1);
+      this.emit({
+        eventType: "CancelOrder",
+        agentId: order.agentId,
+        orderId: order.id,
+        parentOrderId: null,
+        side: order.side,
+        price: order.price,
+        quantity: order.quantity,
+        remainingQuantity: order.remaining,
+        reasonCode: "participant_cancel",
+        metadata: {},
+      });
       return { cancelled: true, reason: null, order: { ...order } };
     }
     return { cancelled: false, reason: "order not found", order: null };
@@ -121,6 +201,18 @@ export class LimitOrderBook {
         rejectedReason: cancellation.reason,
       };
     }
+    this.emit({
+      eventType: "ReplaceOrder",
+      agentId,
+      orderId,
+      parentOrderId: orderId,
+      side: cancellation.order.side,
+      price,
+      quantity,
+      remainingQuantity: null,
+      reasonCode: "participant_replace",
+      metadata: {},
+    });
     return this.submit({
       agentId,
       agentKind: cancellation.order.agentKind,
@@ -154,7 +246,50 @@ export class LimitOrderBook {
         bestBid === null || bestAsk === null
           ? null
           : round((bestBid + bestAsk) / 2),
+      bidQueue: this.queue(this.bids),
+      askQueue: this.queue(this.asks),
     };
+  }
+
+  halt(reason: string): void {
+    this.halted = true;
+    this.emit({
+      eventType: "TradingHalt",
+      agentId: null,
+      orderId: null,
+      parentOrderId: null,
+      side: null,
+      price: null,
+      quantity: null,
+      remainingQuantity: null,
+      reasonCode: reason,
+      metadata: {},
+    });
+  }
+
+  resume(reason: string): void {
+    this.halted = false;
+    this.emit({
+      eventType: "TradingResume",
+      agentId: null,
+      orderId: null,
+      parentOrderId: null,
+      side: null,
+      price: null,
+      quantity: null,
+      remainingQuantity: null,
+      reasonCode: reason,
+      metadata: {},
+    });
+  }
+
+  drainCoreEvents(): CoreExchangeEvent[] {
+    const events = this.events;
+    this.events = [];
+    return events.map((event) => ({
+      ...event,
+      metadata: { ...event.metadata },
+    }));
   }
 
   private validateRequest(request: OrderRequest): string | null {
@@ -190,7 +325,24 @@ export class LimitOrderBook {
       const price = maker.price;
       incoming.remaining -= quantity;
       maker.remaining -= quantity;
-      trades.push(this.createTrade(incoming, maker, price, quantity));
+      const trade = this.createTrade(incoming, maker, price, quantity);
+      trades.push(trade);
+      this.emit({
+        eventType: incoming.remaining > 0 ? "PartialFill" : "Trade",
+        agentId: incoming.agentId,
+        orderId: incoming.id,
+        parentOrderId: maker.id,
+        side: incoming.side,
+        price: trade.price,
+        quantity: trade.quantity,
+        remainingQuantity: incoming.remaining,
+        reasonCode: "price_time_match",
+        metadata: {
+          tradeId: trade.id,
+          makerOrderId: trade.makerOrderId,
+          takerOrderId: trade.takerOrderId,
+        },
+      });
       if (maker.remaining === 0) opposite.shift();
     }
     return trades;
@@ -266,6 +418,33 @@ export class LimitOrderBook {
       }
     }
     return values;
+  }
+
+  private queue(orders: Order[]) {
+    return orders.map((order, index) => ({
+      orderId: order.id,
+      agentId: order.agentId,
+      agentKind: order.agentKind,
+      side: order.side,
+      price: order.price,
+      remaining: order.remaining,
+      queuePosition:
+        orders
+          .slice(0, index)
+          .filter((candidate) => candidate.price === order.price).length + 1,
+      createdTick: order.createdTick,
+      ageTicks: Math.max(0, this.tick - order.createdTick),
+    }));
+  }
+
+  private emit(
+    event: Omit<CoreExchangeEvent, "sequenceNumber" | "simulationTimestamp">,
+  ): void {
+    this.events.push({
+      ...event,
+      sequenceNumber: ++this.eventCounter,
+      simulationTimestamp: this.tick,
+    });
   }
 }
 

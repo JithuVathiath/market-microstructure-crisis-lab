@@ -4,14 +4,15 @@ import { scenarioById, scenarios } from "./scenarios";
 import {
   createDefaultConfig,
   MarketSimulation,
+  runBatchExperiment,
   runCounterfactual,
 } from "./simulation";
 import type { ScenarioId } from "./types";
 
 describe("scenario registry", () => {
-  it("contains five documented research scenarios", () => {
-    expect(scenarios).toHaveLength(5);
-    expect(new Set(scenarios.map((scenario) => scenario.id)).size).toBe(5);
+  it("contains ten documented research scenarios", () => {
+    expect(scenarios).toHaveLength(10);
+    expect(new Set(scenarios.map((scenario) => scenario.id)).size).toBe(10);
     expect(scenarioById("flash-crash").shockTick).toBe(70);
     expect(() => scenarioById("missing" as ScenarioId)).toThrow(
       "Unknown scenario",
@@ -42,6 +43,29 @@ describe("MarketSimulation", () => {
     const third = new MarketSimulation({ ...config, seed: 456 }).runToEnd();
     expect(first.priceHistory).toEqual(second.priceHistory);
     expect(first.priceHistory).not.toEqual(third.priceHistory);
+  });
+
+  it("reproduces the canonical event stream hash for an identical seed", () => {
+    const config = {
+      ...createDefaultConfig("information-shock"),
+      maxTicks: 90,
+    };
+    const first = new MarketSimulation(config).runToEnd();
+    const second = new MarketSimulation(config).runToEnd();
+    expect(first.eventStreamHash).toBe(second.eventStreamHash);
+    expect(first.latestSequenceNumber).toBeGreaterThan(100);
+  });
+
+  it("conserves inventory and cash after accounting for exchange fees", () => {
+    const final = new MarketSimulation({
+      ...createDefaultConfig("flash-crash"),
+      maxTicks: 100,
+    }).runToEnd();
+    expect(final.conservation.inventoryConserved).toBe(true);
+    expect(final.conservation.cashConserved).toBe(true);
+    expect(final.conservation.currentInventory).toBe(
+      final.conservation.initialInventory,
+    );
   });
 
   it.each(scenarios.map((scenario) => scenario.id))(
@@ -96,6 +120,43 @@ describe("MarketSimulation", () => {
     ).toBe(true);
   });
 
+  it("drives the additional scenario mechanisms through canonical events", () => {
+    const cases = [
+      ["institutional-liquidation", "institutional_parent_order"],
+      ["volatility-feedback", "feedback_loop_seed"],
+      ["cancellation-surge", "abnormal_cancellation_pattern"],
+      ["exchange-outage", "synthetic_exchange_outage"],
+      ["tick-size-experiment", "tick_size_changed"],
+    ] as const;
+    for (const [scenario, reasonCode] of cases) {
+      const simulation = new MarketSimulation({
+        ...createDefaultConfig(scenario),
+        maxTicks: 80,
+      });
+      simulation.runToEnd();
+      expect(
+        simulation
+          .eventStream()
+          .some((event) => event.reasonCode === reasonCode),
+      ).toBe(true);
+    }
+  });
+
+  it("fires the configured circuit-breaker threshold deterministically", () => {
+    const base = createDefaultConfig("information-shock");
+    const simulation = new MarketSimulation({
+      ...base,
+      maxTicks: 85,
+      policies: { ...base.policies, circuitBreakerThresholdPct: 0.01 },
+    });
+    simulation.runToEnd();
+    expect(
+      simulation
+        .eventStream()
+        .some((event) => event.eventType === "RegulatoryTrigger"),
+    ).toBe(true);
+  });
+
   it("accepts manual orders and applies policy updates", () => {
     const simulation = new MarketSimulation(createDefaultConfig("stable"));
     const afterOrder = simulation.submitManualOrder({
@@ -109,6 +170,40 @@ describe("MarketSimulation", () => {
     const afterPolicy = simulation.setPolicies(policies);
     expect(simulation.config.policies.speedBumpTicks).toBe(5);
     expect(afterPolicy.alerts[0]?.title).toBe("Policy settings changed");
+  });
+
+  it("applies transmission and exchange latency before retail order arrival", () => {
+    const simulation = new MarketSimulation(createDefaultConfig("stable"));
+    simulation.submitManualOrder({ side: "buy", type: "market", quantity: 5 });
+    expect(
+      simulation
+        .eventStream()
+        .some(
+          (event) =>
+            event.eventType === "NewOrder" && event.agentId === "manual",
+        ),
+    ).toBe(false);
+    simulation.step();
+    simulation.step();
+    simulation.step();
+    expect(
+      simulation
+        .eventStream()
+        .some(
+          (event) =>
+            event.eventType === "NewOrder" && event.agentId === "manual",
+        ),
+    ).toBe(true);
+    const decision = simulation
+      .decisionsSince(0)
+      .find((item) => item.agentId === "manual")!;
+    expect(decision.latency).toMatchObject({
+      marketDataTicks: 2,
+      decisionTicks: 1,
+      transmissionTicks: 2,
+      exchangeProcessingTicks: 1,
+    });
+    expect(decision.variables).toHaveProperty("visibleDepth");
   });
 
   it("rejects an unaffordable manual sell without corrupting state", () => {
@@ -146,5 +241,23 @@ describe("MarketSimulation", () => {
     expect(Object.values(result.improvements).every(Number.isFinite)).toBe(
       true,
     );
+  });
+
+  it("aggregates paired seeds into deterministic simulation intervals", () => {
+    const config = {
+      ...createDefaultConfig("flash-crash"),
+      maxTicks: 90,
+      seed: 700,
+    };
+    const first = runBatchExperiment(config, 3);
+    const second = runBatchExperiment(config, 3);
+    expect(first).toEqual(second);
+    expect(first.runs).toBe(3);
+    expect(first.summaries).toHaveLength(5);
+    expect(
+      first.summaries.every(
+        (summary) => summary.intervalLow <= summary.intervalHigh,
+      ),
+    ).toBe(true);
   });
 });

@@ -9,14 +9,25 @@ const agent: AgentState = {
   label: "Retail",
   cash: 1000,
   inventory: 10,
+  inventoryLimit: 1600,
+  riskTolerance: 0.8,
+  observedPrice: 100,
+  privateValuation: 100,
   initialWealth: 2000,
   submittedQuantity: 100,
   executedQuantity: 50,
   cancellations: 6,
   trades: 4,
-  latencyTicks: 0,
+  latency: {
+    label: "Retail participant",
+    marketDataTicks: 2,
+    decisionTicks: 1,
+    transmissionTicks: 2,
+    exchangeProcessingTicks: 1,
+  },
   active: true,
   lastDecision: "test",
+  currentObjective: "test objective",
 };
 
 const book: BookView = {
@@ -26,6 +37,8 @@ const book: BookView = {
   bestAsk: 100.1,
   spread: 0.2,
   midPrice: 100,
+  bidQueue: [],
+  askQueue: [],
 };
 
 describe("market metrics", () => {
@@ -42,6 +55,7 @@ describe("market metrics", () => {
       agents: [agent],
       totalVolume: 5,
       retailSlippages: [2, 4],
+      institutionalShortfalls: [5, 7],
       recoveryTicks: 7,
     });
     expect(result).toMatchObject({
@@ -52,8 +66,13 @@ describe("market metrics", () => {
       cancelToTradeRatio: 3,
       totalVolume: 5,
       retailSlippageBps: 3,
+      institutionalShortfallBps: 6,
+      bookImbalance: -0.2,
+      cancellationIntensity: 6,
       recoveryTicks: 7,
     });
+    expect(result.microprice).toBeCloseTo(99.98);
+    expect(result.marketImpactBps).toBeCloseTo(100);
     expect(result.spreadBps).toBeCloseTo(20);
     expect(result.volatilityBps).toBeGreaterThan(90);
     expect(result.priceErrorBps).toBeCloseTo(49.75, 1);
@@ -68,6 +87,8 @@ describe("market metrics", () => {
       bestAsk: null,
       spread: null,
       midPrice: null,
+      bidQueue: [],
+      askQueue: [],
     };
     const result = calculateMetrics({
       book: empty,
@@ -77,6 +98,7 @@ describe("market metrics", () => {
       agents: [],
       totalVolume: 0,
       retailSlippages: [],
+      institutionalShortfalls: [],
       recoveryTicks: null,
     });
     expect(result).toMatchObject({

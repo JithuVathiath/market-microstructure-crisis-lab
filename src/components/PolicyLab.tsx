@@ -56,7 +56,11 @@ export const PolicyLab = ({
   ) => onChange({ ...policies, [key]: value });
 
   return (
-    <section className="panel policy-panel" aria-labelledby="policy-lab-title">
+    <section
+      id="policy"
+      className="panel policy-panel"
+      aria-labelledby="policy-lab-title"
+    >
       <div className="panel__header">
         <div>
           <span className="eyebrow">Intervention design</span>
@@ -112,6 +116,36 @@ export const PolicyLab = ({
         suffix="×"
         onChange={(value) => update("maxCancelToTradeRatio", value)}
       />
+      <details className="advanced-policies">
+        <summary>Exchange economics</summary>
+        <Range
+          label="Tick size"
+          value={policies.tickSize}
+          minimum={0.01}
+          maximum={0.1}
+          step={0.01}
+          suffix=""
+          onChange={(value) => update("tickSize", value)}
+        />
+        <Range
+          label="Maker fee / rebate"
+          value={policies.makerFeeBps}
+          minimum={-1}
+          maximum={2}
+          step={0.1}
+          suffix=" bps"
+          onChange={(value) => update("makerFeeBps", value)}
+        />
+        <Range
+          label="Taker fee"
+          value={policies.takerFeeBps}
+          minimum={0}
+          maximum={3}
+          step={0.1}
+          suffix=" bps"
+          onChange={(value) => update("takerFeeBps", value)}
+        />
+      </details>
       <button
         className="button button--accent button--full"
         onClick={onCompare}

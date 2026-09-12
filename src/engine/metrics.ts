@@ -16,6 +16,7 @@ export interface MetricsInput {
   agents: AgentState[];
   totalVolume: number;
   retailSlippages: number[];
+  institutionalShortfalls: number[];
   recoveryTicks: number | null;
 }
 
@@ -28,6 +29,21 @@ export const calculateMetrics = (input: MetricsInput): MarketMetrics => {
     ...input.book.bids.slice(0, 5),
     ...input.book.asks.slice(0, 5),
   ].reduce((total, level) => total + level.quantity, 0);
+  const bestBidQuantity = input.book.bids[0]?.quantity ?? 0;
+  const bestAskQuantity = input.book.asks[0]?.quantity ?? 0;
+  const touchQuantity = bestBidQuantity + bestAskQuantity;
+  const bookImbalance =
+    touchQuantity === 0
+      ? 0
+      : (bestBidQuantity - bestAskQuantity) / touchQuantity;
+  const microprice =
+    input.book.bestBid === null ||
+    input.book.bestAsk === null ||
+    touchQuantity === 0
+      ? midPrice
+      : (input.book.bestAsk * bestBidQuantity +
+          input.book.bestBid * bestAskQuantity) /
+        touchQuantity;
   const recent = input.priceHistory.slice(-30);
   const returns = recent.slice(1).map((point, index) => {
     const previous = recent[index]!.price;
@@ -56,6 +72,21 @@ export const calculateMetrics = (input: MetricsInput): MarketMetrics => {
   );
   const fillRate = submitted === 0 ? 0 : executed / submitted;
   const cancelToTradeRatio = cancellations / Math.max(tradeSides / 2, 1);
+  const marketMakers = input.agents.filter(
+    (agent) => agent.kind === "market-maker",
+  );
+  const marketMakerInventoryRisk = average(
+    marketMakers.map(
+      (agent) =>
+        Math.abs(agent.inventory - 1_000) /
+        Math.max(1, agent.inventoryLimit - 1_000),
+    ),
+  );
+  const impactReference = input.priceHistory.at(-20)?.price ?? midPrice;
+  const marketImpactBps =
+    (Math.abs(input.lastPrice - impactReference) /
+      Math.max(impactReference, 0.01)) *
+    10_000;
   const marketQualityScore = clamp(
     100 - spreadBps * 0.42 - volatilityBps * 0.32 - priceErrorBps * 0.12,
     0,
@@ -73,6 +104,13 @@ export const calculateMetrics = (input: MetricsInput): MarketMetrics => {
     marketQualityScore,
     totalVolume: input.totalVolume,
     retailSlippageBps: average(input.retailSlippages),
+    institutionalShortfallBps: average(input.institutionalShortfalls),
+    marketImpactBps,
+    microprice,
+    bookImbalance,
+    marketMakerInventoryRisk,
+    cancellationIntensity:
+      cancellations / Math.max(input.priceHistory.length - 1, 1),
     recoveryTicks: input.recoveryTicks,
   };
 };

@@ -1,23 +1,49 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test } from "@playwright/test";
 
-test("runs the market and exposes interactive research controls", async ({
+test("runs, pauses, reconstructs an event, inspects a queue and opens a decision", async ({
   page,
 }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Build the market/i }),
+    page.getByRole("heading", { name: /Build the market.*Break the market/i }),
   ).toBeVisible();
   await expect(page.getByText("Synthetic data")).toBeVisible();
-  await page.getByRole("button", { name: "Run experiment" }).click();
-  await expect(page.getByText(/Tick [1-9]/)).toBeVisible({ timeout: 5000 });
+
+  await page.getByRole("button", { name: "Launch Flash Crash" }).click();
+  await expect(page.getByText(/Tick [1-9]/)).toBeVisible({ timeout: 5_000 });
   await page.getByRole("button", { name: "Pause market" }).click();
   await page.getByRole("button", { name: "Advance one tick" }).click();
-  await page.getByRole("button", { name: "Methodology" }).click();
-  await expect(page.getByRole("dialog")).toContainText("price-time priority");
-  await page.getByRole("button", { name: "Close methodology" }).click();
+
+  const previousEvent = page.getByRole("button", { name: "← Previous event" });
+  await previousEvent.click();
+  await expect(
+    page.getByText(/Reconstructed exchange state at event/),
+  ).toBeVisible();
+
+  await page
+    .getByRole("region", { name: "Limit order book" })
+    .getByRole("button", { name: /Inspect (bid|ask) queue/ })
+    .first()
+    .click();
+  await expect(page.locator(".queue-inspector li").first()).toBeVisible();
+
+  const decision = page
+    .getByRole("region", { name: "Agent decision records" })
+    .getByRole("button")
+    .first();
+  await decision.click();
+  await expect(decision).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Synthetic latency")).toBeVisible();
+  expect(consoleErrors).toEqual([]);
 });
 
-test("changes governance rules and produces a counterfactual", async ({
+test("runs a paired policy comparison and exposes research batches", async ({
   page,
 }) => {
   await page.goto("/");
@@ -27,23 +53,58 @@ test("changes governance rules and produces a counterfactual", async ({
     .click();
   await expect(
     page.getByRole("heading", { name: "Same shock, different rules" }),
-  ).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText("Unregulated", { exact: true })).toBeVisible();
-  await expect(page.getByText("Policy lab", { exact: true })).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("cell", { name: "Retail slippage" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Research", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Paired-seed Monte Carlo" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Batch repetitions")).toHaveValue("25");
 });
 
-test("submits a human order and supports deterministic replay navigation", async ({
+test("reproduces an identical event hash and exports a valid replay", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByLabel("Order quantity").fill("7");
-  await page.getByRole("button", { name: "Submit buy order" }).click();
-  await expect(page.getByText("Manual participant")).toBeVisible();
-  await page.getByRole("button", { name: "Run experiment" }).click();
-  await page.waitForTimeout(800);
-  await page.getByRole("button", { name: "Pause market" }).click();
-  await page.getByLabel("Replay tick").fill("0");
+  const step = page.getByRole("button", { name: "Advance one tick" });
+  for (let index = 1; index <= 4; index += 1) {
+    await step.click();
+    await expect(page.getByText(new RegExp(`Tick ${index} /`))).toBeVisible();
+  }
+  const firstHash = await page.locator(".integrity-hash").textContent();
+
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect(page.getByText(/Tick 0 \/ 220/)).toBeVisible();
+  for (let index = 1; index <= 4; index += 1) {
+    await step.click();
+    await expect(page.getByText(new RegExp(`Tick ${index} /`))).toBeVisible();
+  }
+  await expect(page.locator(".integrity-hash")).toHaveText(firstHash ?? "");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download replay JSON" }).click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  if (path === null) throw new Error("Replay download did not produce a file");
+  const replay = JSON.parse(await readFile(path, "utf8")) as {
+    schemaVersion: number;
+    engine: string;
+    eventStream: unknown[];
+    decisionLog: unknown[];
+    eventStreamHash: string;
+  };
+  expect(replay).toMatchObject({ schemaVersion: 2, engine: "rust-wasm" });
+  expect(replay.eventStream.length).toBeGreaterThan(200);
+  expect(replay.decisionLog.length).toBeGreaterThan(0);
+  expect(replay.eventStreamHash).toMatch(/^[a-f0-9]{16}$/);
+
+  await page.locator('input[type="file"]').setInputFiles(path);
   await expect(
-    page.getByText(/Viewing historical state at tick 0/),
+    page.getByText(/Reconstructed exchange state at event/),
   ).toBeVisible();
+  await expect(page.locator(".integrity-hash")).toContainText(
+    replay.eventStreamHash,
+  );
 });

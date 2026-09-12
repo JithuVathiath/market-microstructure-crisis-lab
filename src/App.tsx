@@ -1,17 +1,24 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { AgentTable } from "./components/AgentTable";
+import { BatchExperiments } from "./components/BatchExperiments";
+import { CausalTrace } from "./components/CausalTrace";
 import { Comparison } from "./components/Comparison";
+import { DecisionCards } from "./components/DecisionCards";
+import { Forensics } from "./components/Forensics";
 import { MetricCard } from "./components/MetricCard";
 import { OrderBook } from "./components/OrderBook";
 import { OrderTicket } from "./components/OrderTicket";
+import { ParticipantImpact } from "./components/ParticipantImpact";
 import { PolicyLab } from "./components/PolicyLab";
 import { PriceChart } from "./components/PriceChart";
+import { ResearchMetrics } from "./components/ResearchMetrics";
 import { Timeline } from "./components/Timeline";
 import {
   createIncidentReport,
   createReplay,
   DISCLAIMER,
+  parseReplay,
 } from "./engine/replay";
 import { scenarioById, scenarios } from "./engine/scenarios";
 import { useMarketLab } from "./hooks/useMarketLab";
@@ -27,6 +34,9 @@ const download = (filename: string, content: string, type: string): void => {
 export const App = () => {
   const lab = useMarketLab();
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [mode, setMode] = useState<"demo" | "research">("demo");
+  const [replayError, setReplayError] = useState<string | null>(null);
+  const replayInput = useRef<HTMLInputElement>(null);
   const view = lab.displayedSnapshot;
   const live = lab.snapshot;
   const scenario = scenarioById(lab.config.scenario);
@@ -43,26 +53,58 @@ export const App = () => {
   const exportReplay = () =>
     download(
       `market-replay-${lab.config.scenario}-seed-${lab.config.seed}.json`,
-      JSON.stringify(createReplay(lab.config, live), null, 2),
+      JSON.stringify(
+        createReplay(lab.config, live, lab.events, lab.decisions),
+        null,
+        2,
+      ),
       "application/json",
     );
   const exportReport = () =>
     download(
       `incident-report-${lab.config.scenario}.html`,
-      createIncidentReport(lab.config, live),
+      createIncidentReport(lab.config, live, lab.events, lab.comparison),
       "text/html",
     );
 
+  const importReplay = async (file: File) => {
+    try {
+      lab.loadReplay(parseReplay(await file.text()));
+      setReplayError(null);
+    } catch (error) {
+      setReplayError(
+        error instanceof Error ? error.message : "Invalid replay file",
+      );
+    }
+  };
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell app-shell--${mode}`}>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Market Lab home">
           <span className="brand__mark">ML</span>
           <span>
-            <strong>Market Crisis Lab</strong>
+            <strong>Market Microstructure Lab</strong>
             <small>Microstructure · Simulation · Governance</small>
           </span>
         </a>
+        <nav className="primary-nav" aria-label="Primary navigation">
+          <a href="#market">
+            <span>01</span> Market
+          </a>
+          <a href="#crisis">
+            <span>02</span> Crisis
+          </a>
+          <a href="#forensics">
+            <span>03</span> Forensics
+          </a>
+          <a href="#policy">
+            <span>04</span> Policy
+          </a>
+          <a href="#research">
+            <span>05</span> Research
+          </a>
+        </nav>
         <div className="topbar__actions">
           <span className="synthetic-badge">
             <i /> Synthetic data
@@ -88,25 +130,81 @@ export const App = () => {
             <span className="kicker">
               <i /> Interactive research instrument
             </span>
+            <small className="hero__overline">
+              Market Microstructure Crisis &amp; Governance Lab
+            </small>
             <h1>
-              Build the market.
-              <br />
-              <span>Stress the market.</span> Govern it.
+              Build the market. <span>Break the market.</span> Rewind the
+              market. Change the rules. Run it again.
             </h1>
             <p>
-              Explore how heterogeneous traders, liquidity shocks, and market
-              rules interact inside a deterministic limit-order-book simulation.
+              A deterministic Rust/WebAssembly market simulator for
+              investigating liquidity crises, algorithmic interactions and
+              market regulation through event-level replay and counterfactual
+              experiments.
             </p>
+            <div className="hero__actions">
+              <button
+                className="button button--primary"
+                onClick={() => lab.launchScenario("flash-crash")}
+              >
+                Launch Flash Crash
+              </button>
+              <a className="button button--ghost" href="#market">
+                Open Exchange Lab
+              </a>
+            </div>
+            <div
+              className="technology-strip"
+              aria-label="Technical capabilities"
+            >
+              <span>Rust</span>
+              <span>WebAssembly</span>
+              <span>React</span>
+              <span>Deterministic simulation</span>
+              <span>Event-sourced replay</span>
+            </div>
           </div>
           <div className="hero__scenario-card">
             <span>Active scenario</span>
             <strong>{scenario.name}</strong>
             <p>{scenario.description}</p>
             <small>Research question: {scenario.learningGoal}</small>
+            <small>Model limit: {scenario.limitations}</small>
           </div>
         </section>
 
-        <section className="command-bar" aria-label="Simulation controls">
+        <div className="mode-switch" aria-label="Interface mode">
+          <div>
+            <span className="eyebrow">Workspace</span>
+            <strong>{mode === "demo" ? "Demo mode" : "Research mode"}</strong>
+            <small>
+              {mode === "demo"
+                ? "A guided two-minute view"
+                : "Full parameters, raw events and exports"}
+            </small>
+          </div>
+          <div className="segmented mode-switch__buttons">
+            <button
+              className={mode === "demo" ? "active" : ""}
+              onClick={() => setMode("demo")}
+            >
+              Demo
+            </button>
+            <button
+              className={mode === "research" ? "active" : ""}
+              onClick={() => setMode("research")}
+            >
+              Research
+            </button>
+          </div>
+        </div>
+
+        <section
+          id="market"
+          className="command-bar"
+          aria-label="Simulation controls"
+        >
           <label className="scenario-select">
             <span>Scenario</span>
             <select
@@ -186,11 +284,12 @@ export const App = () => {
           </div>
         </section>
 
-        {lab.selectedTick !== null && (
+        {(lab.selectedTick !== null || lab.selectedSequence !== null) && (
           <div className="time-travel-banner">
-            Viewing historical state at tick {lab.selectedTick}. Live simulation
-            controls remain available.{" "}
-            <button onClick={() => lab.setSelectedTick(null)}>
+            {lab.selectedSequence !== null
+              ? `Reconstructed exchange state at event #${lab.selectedSequence}, tick ${view.tick}.`
+              : `Viewing historical tick ${lab.selectedTick}.`}{" "}
+            <button onClick={() => lab.selectSequence(null)}>
               Return to live
             </button>
           </div>
@@ -201,30 +300,35 @@ export const App = () => {
             label="Market price"
             value={`$${view.metrics.midPrice.toFixed(2)}`}
             detail={`Fundamental $${view.fundamentalPrice.toFixed(2)}`}
+            definition="Midpoint of the best displayed bid and ask; falls back to the latest trade when one side is empty."
             tone="green"
           />
           <MetricCard
             label="Quoted spread"
             value={`${view.metrics.spreadBps.toFixed(1)} bps`}
             detail="Lower supports execution quality"
+            definition="Best ask minus best bid, divided by mid-price, in basis points."
             tone="cyan"
           />
           <MetricCard
             label="Volatility"
             value={`${view.metrics.volatilityBps.toFixed(1)} bps`}
             detail="Rolling realized volatility"
+            definition="Root mean square of the most recent 30 logical-tick log returns."
             tone="pink"
           />
           <MetricCard
             label="Visible depth"
             value={view.metrics.depth.toLocaleString()}
             detail="Units across displayed levels"
+            definition="Aggregate quantity at the best five visible price levels on each side."
             tone="cyan"
           />
           <MetricCard
             label="Quality score"
             value={view.metrics.marketQualityScore.toFixed(1)}
             detail="Composite, 0–100"
+            definition="Transparent teaching index penalising spread, volatility and price-discovery error."
             tone="amber"
           />
         </section>
@@ -245,21 +349,44 @@ export const App = () => {
         </div>
 
         {lab.comparison && <Comparison result={lab.comparison} />}
-        <AgentTable agents={view.agents} />
-        <Timeline
-          history={lab.history}
-          selectedTick={lab.selectedTick}
-          onSelect={lab.setSelectedTick}
+        <CausalTrace steps={view.causalChain} onSelect={lab.selectSequence} />
+        <Forensics
+          events={lab.events}
+          selectedSequence={lab.selectedSequence}
+          onSelect={lab.selectSequence}
         />
+        <DecisionCards
+          decisions={lab.decisions}
+          selectedSequence={lab.selectedSequence}
+          onSelect={lab.selectSequence}
+        />
+        <ParticipantImpact agents={view.agents} />
+        <div className="research-only">
+          <ResearchMetrics metrics={view.metrics} />
+          <AgentTable agents={view.agents} />
+          <Timeline
+            history={lab.history}
+            selectedTick={lab.selectedTick}
+            onSelect={lab.setSelectedTick}
+          />
+          <BatchExperiments
+            result={lab.batchResult}
+            running={lab.batchRunning}
+            onRun={lab.runBatch}
+          />
+        </div>
 
         <section className="panel export-panel">
           <div>
             <span className="eyebrow">Reproducible evidence</span>
             <h2>Export the experiment</h2>
             <p>
-              Save the exact seed, market rules, final state, and incident
-              timeline for audit or peer review.
+              Save the exact seed, market rules, final state, and incident event
+              stream for audit, deterministic reconstruction, or peer review.
             </p>
+            <small className="integrity-hash">
+              Event hash · {live.eventStreamHash}
+            </small>
           </div>
           <div>
             <button className="button button--ghost" onClick={exportReplay}>
@@ -268,14 +395,35 @@ export const App = () => {
             <button className="button button--ghost" onClick={exportReport}>
               Download incident report
             </button>
+            <button
+              className="button button--ghost"
+              onClick={() => replayInput.current?.click()}
+            >
+              Import replay JSON
+            </button>
+            <input
+              ref={replayInput}
+              className="visually-hidden"
+              aria-label="Import replay JSON"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importReplay(file);
+              }}
+            />
           </div>
         </section>
+        {replayError && (
+          <p className="replay-error" role="alert">
+            {replayError}
+          </p>
+        )}
 
         <footer>
           <p>{DISCLAIMER}</p>
           <span>
-            Deterministic engine · Price-time priority · Reproducible
-            experiments
+            Rust/WASM engine · Price-time priority · Reproducible experiments
           </span>
         </footer>
       </main>

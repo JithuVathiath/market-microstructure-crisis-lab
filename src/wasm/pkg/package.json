@@ -1,0 +1,21 @@
+{
+  "name": "market-exchange-core",
+  "type": "module",
+  "description": "Deterministic price-time-priority exchange core for Market Microstructure Crisis Lab",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JithuVathiath/market-microstructure-crisis-lab"
+  },
+  "files": [
+    "market_exchange_core_bg.wasm",
+    "market_exchange_core.js",
+    "market_exchange_core.d.ts"
+  ],
+  "main": "market_exchange_core.js",
+  "types": "market_exchange_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
