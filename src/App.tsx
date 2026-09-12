@@ -247,6 +247,14 @@ export const App = () => {
             </button>
             <button
               className="icon-button"
+              onClick={lab.stop}
+              disabled={!lab.playing}
+              aria-label="Stop experiment"
+            >
+              Stop
+            </button>
+            <button
+              className="icon-button research-only"
               onClick={lab.step}
               disabled={lab.playing || live.status === "complete"}
               aria-label="Advance one tick"

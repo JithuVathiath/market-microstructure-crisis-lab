@@ -17,7 +17,8 @@ test("runs, pauses, reconstructs an event, inspects a queue and opens a decision
 
   await page.getByRole("button", { name: "Launch Flash Crash" }).click();
   await expect(page.getByText(/Tick [1-9]/)).toBeVisible({ timeout: 5_000 });
-  await page.getByRole("button", { name: "Pause market" }).click();
+  await page.getByRole("button", { name: "Stop experiment" }).click();
+  await page.getByRole("button", { name: "Research", exact: true }).click();
   await page.getByRole("button", { name: "Advance one tick" }).click();
 
   const previousEvent = page.getByRole("button", { name: "← Previous event" });
@@ -68,6 +69,7 @@ test("reproduces an identical event hash and exports a valid replay", async ({
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Research", exact: true }).click();
   const step = page.getByRole("button", { name: "Advance one tick" });
   for (let index = 1; index <= 4; index += 1) {
     await step.click();
